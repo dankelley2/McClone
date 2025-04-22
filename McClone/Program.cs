@@ -1,5 +1,7 @@
 ﻿using OpenTK.Windowing.Desktop;
+using OpenTK.Windowing.GraphicsLibraryFramework; // Needed for GLFW and Monitors
 using OpenTK.Mathematics;
+using OpenTK.Windowing.Common;
 
 namespace VoxelGame;
 
@@ -9,24 +11,45 @@ public static class Program
     {
         Console.WriteLine("Starting Voxel Game...");
 
+        if (!GLFW.Init())
+        {
+            Console.WriteLine("Failed to initialize GLFW");
+            return;
+        }
+
+        // Keep the hint you found worked best or the recommended one
+        GLFW.WindowHint(WindowHintBool.ScaleFramebuffer, true); // Or CocoaRetinaFramebuffer if you switched back
+        // Console.WriteLine("==> Set WindowHintBool.ScaleFramebuffer hint to TRUE");
+
+        // --- Configure for Fullscreen ---
         var nativeWindowSettings = new NativeWindowSettings()
         {
-            ClientSize = new Vector2i(1280, 720),
-            Title = "OpenTK Voxel Game",
-            // Set API version (e.g., OpenGL 3.3)
+            // Size might be ignored in exclusive fullscreen, but set it reasonably
+            ClientSize = new Vector2i(1920, 1080), // Or desired resolution
+            Title = "OpenTK Voxel Game (Fullscreen)",
             APIVersion = new Version(3, 3),
-            Flags = OpenTK.Windowing.Common.ContextFlags.ForwardCompatible, // Important for macOS
+            Flags = ContextFlags.ForwardCompatible,
+
+            // Set the window state to Fullscreen
+            WindowState = WindowState.Fullscreen,
+
+            // Optional: Specify the primary monitor explicitly
+            // CurrentMonitor = Monitors.GetPrimaryMonitor().Handle // Requires reference to Monitors class
         };
+        Console.WriteLine($"==> Attempting to start in {nativeWindowSettings.WindowState} mode.");
+        // --- End Fullscreen Configuration ---
+
 
         using (var game = new Game(GameWindowSettings.Default, nativeWindowSettings))
         {
-            // Optional: Set update/render frequency
+            // Setting UpdateFrequency is fine
             game.UpdateFrequency = 60.0;
-            // game.RenderFrequency = 60.0;
+            // RenderFrequency is often determined by VSync in fullscreen
 
             game.Run();
         }
 
-         Console.WriteLine("Game closed.");
+        GLFW.Terminate();
+        Console.WriteLine("Game closed.");
     }
 }
