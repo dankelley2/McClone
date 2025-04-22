@@ -84,7 +84,7 @@ public class Shader : IDisposable
          int location = GetUniformLocation(name);
          if (location != -1)
          {
-              GL.UniformMatrix4(location, true, ref data); // Use true for RowMajor layout if needed, false for ColumnMajor (OpenGL default)
+              GL.UniformMatrix4(location, false, ref data); // Use false for ColumnMajor (OpenGL default)
          }
     }
      public void SetVector3(string name, OpenTK.Mathematics.Vector3 data)

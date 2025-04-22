@@ -267,52 +267,54 @@ public class Game : GameWindow
     }
 
 
-    protected override void OnRenderFrame(FrameEventArgs e)
+protected override void OnRenderFrame(FrameEventArgs e)
+{
+    base.OnRenderFrame(e);
+    // CheckGLError("RenderFrame Start"); // Keep error checks if helpful
+
+    GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+    // CheckGLError("After Clear");
+
+    // Ensure we have something to draw and the VAO is valid
+    if (_voxelPositions.Count == 0 || _voxelVao == 0)
     {
-        base.OnRenderFrame(e);
-        CheckGLError("RenderFrame Start");
-
-        GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-        CheckGLError("After Clear");
-
-        if (_voxelPositions.Count == 0 || _voxelVao == 0) // Check if VAO was created
-        {
-             Console.WriteLine("Skipping render - no voxels or VAO not ready.");
-             SwapBuffers(); // Still swap buffers even if not drawing
-             return;
-        }
-
-        _shader.Use();
-        CheckGLError("After Shader Use");
-
-        Matrix4 view = _camera.GetViewMatrix();
-        Matrix4 projection = _camera.GetProjectionMatrix();
-        _shader.SetMatrix4("view", view);
-        CheckGLError("After SetView");
-        _shader.SetMatrix4("projection", projection);
-        CheckGLError("After SetProjection");
-
-        Matrix4 model = Matrix4.Identity;
-        _shader.SetMatrix4("model", model);
-        CheckGLError("After SetModel");
-
-        int vertexCountToDraw = _voxelPositions.Count * _cubeVertexCount;
-        // Console.WriteLine($"Attempting to draw {vertexCountToDraw} vertices."); // Noisy
-
-        if (vertexCountToDraw > 0)
-        {
-            GL.BindVertexArray(_voxelVao);
-            CheckGLError("After BindVAO for Draw");
-            GL.DrawArrays(PrimitiveType.Triangles, 0, vertexCountToDraw);
-            CheckGLError("After DrawArrays");
-            GL.BindVertexArray(0);
-        }
-        else Console.WriteLine("Skipping draw call - vertex count is zero.");
-
-
-        SwapBuffers();
-        CheckGLError("After SwapBuffers");
+        SwapBuffers(); // Still swap buffers even if not drawing
+        return;
     }
+
+    _shader.Use();
+    // CheckGLError("After Shader Use");
+
+    // --- Use Camera for View and Projection ---
+    Matrix4 view = _camera.GetViewMatrix(); // Use the camera's view matrix
+    Matrix4 projection = _camera.GetProjectionMatrix(); // Use the camera's projection matrix
+    // --- End Camera Use ---
+
+    // Set shader uniforms
+    _shader.SetMatrix4("view", view);
+    // CheckGLError("After SetView");
+    _shader.SetMatrix4("projection", projection); // Make sure this is not commented out
+    // CheckGLError("After SetProjection");
+
+    // Model matrix is identity since vertices are in world space
+    Matrix4 model = Matrix4.Identity;
+    _shader.SetMatrix4("model", model);
+    // CheckGLError("After SetModel");
+
+    // Draw the voxels
+    int vertexCountToDraw = _voxelPositions.Count * _cubeVertexCount;
+    if (vertexCountToDraw > 0)
+    {
+        GL.BindVertexArray(_voxelVao);
+        // CheckGLError("After BindVAO for Draw");
+        GL.DrawArrays(PrimitiveType.Triangles, 0, vertexCountToDraw);
+        // CheckGLError("After DrawArrays");
+        GL.BindVertexArray(0); // Unbind VAO
+    }
+
+    SwapBuffers();
+    // CheckGLError("After SwapBuffers");
+}
 
     protected override void OnUpdateFrame(FrameEventArgs e) { /* ... unchanged physics and input ... */
         base.OnUpdateFrame(e);
