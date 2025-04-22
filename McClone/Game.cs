@@ -45,7 +45,7 @@ public class Game : GameWindow
     public Game(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings)
         : base(gameWindowSettings, nativeWindowSettings)
     {
-        this.CenterWindow(new Vector2i(nativeWindowSettings.Size.X, nativeWindowSettings.Size.Y));
+        this.CenterWindow(new Vector2i(nativeWindowSettings.ClientSize.X, nativeWindowSettings.ClientSize.Y));
     }
 
     // Helper to check for errors
@@ -60,10 +60,26 @@ public class Game : GameWindow
         }
     }
 
+    // In Game.cs
     protected override void OnLoad()
     {
         base.OnLoad();
         Console.WriteLine("OpenGL Version: " + GL.GetString(StringName.Version));
+
+        // --- GLFW Framebuffer Size Test ---
+        // Get logical window size and framebuffer size
+        unsafe
+        {
+            GLFW.GetFramebufferSize(this.WindowPtr, out int fbWidth, out int fbHeight);
+        
+            Console.WriteLine($"==> OnLoad Window Logical Size: X={Size.X}, Y={Size.Y}");
+            Console.WriteLine($"==> OnLoad Framebuffer Size: Width={fbWidth}, Height={fbHeight}");
+            
+            // Set viewport using the actual Framebuffer size
+            GL.Viewport(0, 0, fbWidth, fbHeight);
+        }
+        CheckGLError("After Viewport Load");
+        // --- End Test ---
 
         GL.ClearColor(0.5f, 0.75f, 0.9f, 1.0f);
         GL.Enable(EnableCap.DepthTest);
@@ -73,8 +89,18 @@ public class Game : GameWindow
         _shader = new Shader("Shaders/shader.vert", "Shaders/shader.frag");
         CheckGLError("After Shader Load");
 
-        // Setup Camera (initial position set later)
-        _camera = new Camera(Vector3.Zero, Size.X / (float)Size.Y); // Temp position
+        // Setup Camera using LOGICAL size for aspect ratio calculation
+        // Check for zero height before calculating aspect ratio
+        float initialAspectRatio;
+        if (Size.Y > 0 && Size.X > 0) {
+             initialAspectRatio = Size.X / (float)Size.Y; // Use logical size here
+             Console.WriteLine($"==> Calculated Initial Aspect Ratio: {initialAspectRatio}");
+        } else {
+             initialAspectRatio = 16.0f / 9.0f; // Default if size is invalid
+             Console.WriteLine($"==> Warning: Initial window size invalid ({Size.X}x{Size.Y}), using default aspect ratio 16:9.");
+        }
+        _camera = new Camera(Vector3.Zero, initialAspectRatio); // Temp position, correct aspect
+        // _camera.AspectRatio = initialAspectRatio; // Camera constructor should set this
 
         // Setup Noise
         _noiseModule.Seed = new Random().Next();
@@ -267,54 +293,85 @@ public class Game : GameWindow
     }
 
 
-protected override void OnRenderFrame(FrameEventArgs e)
-{
-    base.OnRenderFrame(e);
-    // CheckGLError("RenderFrame Start"); // Keep error checks if helpful
-
-    GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-    // CheckGLError("After Clear");
-
-    // Ensure we have something to draw and the VAO is valid
-    if (_voxelPositions.Count == 0 || _voxelVao == 0)
+    protected override void OnRenderFrame(FrameEventArgs e)
     {
-        SwapBuffers(); // Still swap buffers even if not drawing
-        return;
+        base.OnRenderFrame(e);
+        // CheckGLError("RenderFrame Start"); // Keep error checks if helpful
+
+        GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+        // CheckGLError("After Clear");
+
+        // Ensure we have something to draw and the VAO is valid
+        if (_voxelPositions.Count == 0 || _voxelVao == 0)
+        {
+            SwapBuffers(); // Still swap buffers even if not drawing
+            return;
+        }
+
+        _shader.Use();
+        // CheckGLError("After Shader Use");
+
+        // --- Use Camera for View and Projection ---
+        Matrix4 view = _camera.GetViewMatrix(); // Use the camera's view matrix
+        Matrix4 projection = _camera.GetProjectionMatrix(); // Use the camera's projection matrix
+        // --- End Camera Use ---
+
+        // Set shader uniforms
+        _shader.SetMatrix4("view", view);
+        // CheckGLError("After SetView");
+        _shader.SetMatrix4("projection", projection); // Make sure this is not commented out
+        // CheckGLError("After SetProjection");
+
+        // Model matrix is identity since vertices are in world space
+        Matrix4 model = Matrix4.Identity;
+        _shader.SetMatrix4("model", model);
+        // CheckGLError("After SetModel");
+
+        // Draw the voxels
+        int vertexCountToDraw = _voxelPositions.Count * _cubeVertexCount;
+        if (vertexCountToDraw > 0)
+        {
+            GL.BindVertexArray(_voxelVao);
+            // CheckGLError("After BindVAO for Draw");
+            GL.DrawArrays(PrimitiveType.Triangles, 0, vertexCountToDraw);
+            // CheckGLError("After DrawArrays");
+            GL.BindVertexArray(0); // Unbind VAO
+        }
+
+        SwapBuffers();
+        // CheckGLError("After SwapBuffers");
     }
 
-    _shader.Use();
-    // CheckGLError("After Shader Use");
+// protected override void OnRenderFrame(FrameEventArgs e)
+// {
+//     base.OnRenderFrame(e);
+//     GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
-    // --- Use Camera for View and Projection ---
-    Matrix4 view = _camera.GetViewMatrix(); // Use the camera's view matrix
-    Matrix4 projection = _camera.GetProjectionMatrix(); // Use the camera's projection matrix
-    // --- End Camera Use ---
+//     if (_voxelPositions.Count == 0 || _voxelVao == 0) {
+//         SwapBuffers();
+//         return;
+//     }
 
-    // Set shader uniforms
-    _shader.SetMatrix4("view", view);
-    // CheckGLError("After SetView");
-    _shader.SetMatrix4("projection", projection); // Make sure this is not commented out
-    // CheckGLError("After SetProjection");
+//     _shader.Use(); // Use original shader program
 
-    // Model matrix is identity since vertices are in world space
-    Matrix4 model = Matrix4.Identity;
-    _shader.SetMatrix4("model", model);
-    // CheckGLError("After SetModel");
+//     // --- Test with Identity Matrices ---
+//     Matrix4 identityMatrix = Matrix4.Identity;
+//     _shader.SetMatrix4("view", identityMatrix);       // Pass Identity
+//     _shader.SetMatrix4("projection", identityMatrix); // Pass Identity
+//     _shader.SetMatrix4("model", identityMatrix);      // Pass Identity
+//     // --- End Test ---
 
-    // Draw the voxels
-    int vertexCountToDraw = _voxelPositions.Count * _cubeVertexCount;
-    if (vertexCountToDraw > 0)
-    {
-        GL.BindVertexArray(_voxelVao);
-        // CheckGLError("After BindVAO for Draw");
-        GL.DrawArrays(PrimitiveType.Triangles, 0, vertexCountToDraw);
-        // CheckGLError("After DrawArrays");
-        GL.BindVertexArray(0); // Unbind VAO
-    }
+//     // Draw the voxels
+//     int vertexCountToDraw = _voxelPositions.Count * _cubeVertexCount;
+//     if (vertexCountToDraw > 0)
+//     {
+//         GL.BindVertexArray(_voxelVao);
+//         GL.DrawArrays(PrimitiveType.Triangles, 0, vertexCountToDraw);
+//         GL.BindVertexArray(0);
+//     }
 
-    SwapBuffers();
-    // CheckGLError("After SwapBuffers");
-}
+//     SwapBuffers();
+// }
 
     protected override void OnUpdateFrame(FrameEventArgs e) { /* ... unchanged physics and input ... */
         base.OnUpdateFrame(e);
@@ -395,14 +452,27 @@ protected override void OnRenderFrame(FrameEventArgs e)
     }
 
 
-    protected override void OnResize(ResizeEventArgs e) { /* ... unchanged ... */
-         base.OnResize(e);
+    protected override void OnResize(ResizeEventArgs e)
+    {
+        base.OnResize(e);
+        // Log the size *before* setting viewport
+        Console.WriteLine($"==> OnResize Event: New Size X={Size.X}, Y={Size.Y}"); // <<< ADD LOGGING
         GL.Viewport(0, 0, Size.X, Size.Y);
+        CheckGLError("After Viewport Resize"); // Add error check here too
+
         if (_camera != null)
         {
-            _camera.AspectRatio = Size.X / (float)Size.Y;
+            // Important: Check for division by zero if window is minimized
+            if (Size.Y > 0) {
+                _camera.AspectRatio = Size.X / (float)Size.Y; // Ensure float division
+                Console.WriteLine($"==> AspectRatio updated to: {_camera.AspectRatio}"); // <<< ADD LOGGING
+            } else {
+                Console.WriteLine("==> Warning: Window height is zero, skipping aspect ratio update.");
+            }
+            // If your Camera class requires a method call to update the projection matrix, call it here.
+            // e.g. _camera.UpdateProjection();
         }
-     }
+    }
 
     protected override void OnUnload() { /* ... use renamed VBO ... */
          // Dispose of resources

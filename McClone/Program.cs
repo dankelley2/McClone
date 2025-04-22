@@ -11,7 +11,7 @@ public static class Program
 
         var nativeWindowSettings = new NativeWindowSettings()
         {
-            Size = new Vector2i(1280, 720),
+            ClientSize = new Vector2i(1280, 720),
             Title = "OpenTK Voxel Game",
             // Set API version (e.g., OpenGL 3.3)
             APIVersion = new Version(3, 3),
