@@ -1,0 +1,43 @@
+# Build results
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio Code
+.vscode/
+
+# Rider
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# NuGet packages
+*.nupkg
+# The packages folder can be ignored because of PackageReference
+packages/
+# NuGet v3's project.json files produces this lock file
+project.lock.json
+# NuGet v4+ lock file
+packages.lock.json
+
+# OpenTK native libraries (if copied to output)
+runtimes/
+
+# Logs
+*.log
+
+# Shader binaries (if any)
+*.spv
+*.bin
+
+# Others
+*.vspscc
+*.vssscc
+_ReSharper*/
+*.resharper
+*.DotSettings.user
