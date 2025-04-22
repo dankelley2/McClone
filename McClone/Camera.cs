@@ -14,7 +14,7 @@ public class Camera
     private Vector3 _up = Vector3.UnitY;
     private Vector3 _right = Vector3.UnitX;
 
-    private float _fov = MathHelper.PiOver2; // 90 degrees FOV
+    private float _fov = MathHelper.DegreesToRadians(70.0f); // 70 degrees FOV
     private float _sensitivity = 0.1f;
 
     public Camera(Vector3 position, float aspectRatio)

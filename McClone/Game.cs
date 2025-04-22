@@ -342,37 +342,6 @@ public class Game : GameWindow
         // CheckGLError("After SwapBuffers");
     }
 
-// protected override void OnRenderFrame(FrameEventArgs e)
-// {
-//     base.OnRenderFrame(e);
-//     GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-
-//     if (_voxelPositions.Count == 0 || _voxelVao == 0) {
-//         SwapBuffers();
-//         return;
-//     }
-
-//     _shader.Use(); // Use original shader program
-
-//     // --- Test with Identity Matrices ---
-//     Matrix4 identityMatrix = Matrix4.Identity;
-//     _shader.SetMatrix4("view", identityMatrix);       // Pass Identity
-//     _shader.SetMatrix4("projection", identityMatrix); // Pass Identity
-//     _shader.SetMatrix4("model", identityMatrix);      // Pass Identity
-//     // --- End Test ---
-
-//     // Draw the voxels
-//     int vertexCountToDraw = _voxelPositions.Count * _cubeVertexCount;
-//     if (vertexCountToDraw > 0)
-//     {
-//         GL.BindVertexArray(_voxelVao);
-//         GL.DrawArrays(PrimitiveType.Triangles, 0, vertexCountToDraw);
-//         GL.BindVertexArray(0);
-//     }
-
-//     SwapBuffers();
-// }
-
     protected override void OnUpdateFrame(FrameEventArgs e) { /* ... unchanged physics and input ... */
         base.OnUpdateFrame(e);
         float dt = (float)e.Time;
