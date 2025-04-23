@@ -15,8 +15,8 @@ namespace VoxelGame
         public Vector2i ChunkCoords { get; } // (ChunkX, ChunkZ)
         public Vector3i WorldOffset { get; } // (ChunkX * ChunkSize, 0, ChunkZ * ChunkSize)
 
-        // Dictionary where height is key, and layer of voxels is value
-        private Dictionary<byte, List<byte>> _voxelPositions = new();
+        // Compressed voxel storage: one 2D array per Y layer, null if empty
+        private byte[][,] _layers = new byte[ChunkHeight][,];
 
         private int _vao = 0;
         private int _vbo = 0;
@@ -37,8 +37,29 @@ namespace VoxelGame
         public bool IsReadyToDraw => _isInitialized && !_isDirty && _vao != 0;
         internal bool IsDirty => _isDirty; // Add internal getter
 
-        // Add internal getter for voxel positions
-        internal Dictionary<byte, List<byte>> GetVoxelPositions() => _voxelPositions; // Note: Access should be synchronized if modified after generation
+        // Get all non-air voxel positions by Y (for collision)
+        internal IEnumerable<(byte y, List<(byte x, byte z)>)> GetVoxelPositionsByY()
+        {
+            for (byte y = 0; y < ChunkHeight; y++)
+            {
+                var layer = _layers[y];
+                if (layer == null) continue;
+                List<(byte x, byte z)> positions = null;
+                for (byte x = 0; x < ChunkSize; x++)
+                {
+                    for (byte z = 0; z < ChunkSize; z++)
+                    {
+                        if (layer[x, z] != 0)
+                        {
+                            positions ??= new List<(byte x, byte z)>();
+                            positions.Add((x, z));
+                        }
+                    }
+                }
+                if (positions != null)
+                    yield return (y, positions);
+            }
+        }
 
         // Generates terrain data for this chunk (Called from background thread)
         public void GenerateTerrain()
@@ -55,37 +76,34 @@ namespace VoxelGame
 
             try
             {
-                _voxelPositions.Clear();
+                for (int y = 0; y < ChunkHeight; y++)
+                    _layers[y] = null;
 
-                for (int i = 0; i < ChunkSize * ChunkSize; i++)
+                for (int x = 0; x < ChunkSize; x++)
                 {
-                    var coords = VoxelIndexToCoords((byte)i);
-
-                    // Use noise module from parent world (thread-safe read assumed for SharpNoise)
-                    double noiseValue = _parentWorld.GetNoiseValue(WorldOffset.X + coords.X, WorldOffset.Z + coords.Z); // Use helper method
-                    byte height = (byte)Math.Max(byte.MinValue, Math.Min(byte.MaxValue, World.BaseHeight + Math.Round((noiseValue + 1.0) / 2.0 * World.TerrainAmplitude)));
-
-                    // Generate column of voxels within chunk height limits
-                    //for (byte y = World.BaseHeight - 5; y <= height && y < ChunkHeight; y++)
-                    //{
-                    //if (!_voxelPositions.ContainsKey(y))
-                    //{
-                    //    _voxelPositions[y] = new List<byte>();
-                    //}
-                    //_voxelPositions[y].Add((byte)i);
-                    //}
-
-                    if (!_voxelPositions.ContainsKey(height))
+                    for (int z = 0; z < ChunkSize; z++)
                     {
-                        _voxelPositions[height] = new List<byte>();
-                    }
-                    _voxelPositions[height].Add((byte)i);
+                        double noiseValue = _parentWorld.GetNoiseValue(WorldOffset.X + x, WorldOffset.Z + z);
+                        byte height = (byte)Math.Max(byte.MinValue, Math.Min(byte.MaxValue, World.BaseHeight + Math.Round((noiseValue + 1.0) / 2.0 * World.TerrainAmplitude)));
+                        
+                        for (byte y = World.BaseHeight - 1; y <= height && y < ChunkHeight; y++){
+                            if (_layers[y] == null)
+                                _layers[y] = new byte[ChunkSize, ChunkSize];
+                            _layers[y][x, z] = 1; // 1 = solid voxel
+                        }
 
+                        // if (height < ChunkHeight)
+                        // {
+                        //     if (_layers[height] == null)
+                        //         _layers[height] = new byte[ChunkSize, ChunkSize];
+                        //     _layers[height][x, z] = 1; // 1 = solid voxel
+                        // }
+                    }
                 }
             }
             finally // Ensure flags are reset even if an error occurs
             {
-                 // No lock needed for volatile writes if atomicity isn't required across multiple fields
+                // No lock needed for volatile writes if atomicity isn't required across multiple fields
                 _isDirty = true; // Mark for buffer update (main thread will handle)
                 _isGenerating = false;
                 _isInitialized = true; // Mark as generated
@@ -93,11 +111,11 @@ namespace VoxelGame
             // Console.WriteLine($"Generated terrain for chunk {ChunkCoords} on thread {Thread.CurrentThread.ManagedThreadId}");
         }
 
-        public static (byte X,byte Z) VoxelIndexToCoords(byte index)
+        public static (byte X, byte Z) VoxelIndexToCoords(byte index)
         {
             byte x = (byte)(index % ChunkSize);
             byte z = (byte)(index / ChunkSize);
-            return new (x,z);
+            return new(x, z);
         }
 
         // Sets up OpenGL buffers for this chunk (MUST be called from the main/OpenGL thread)
@@ -105,45 +123,42 @@ namespace VoxelGame
         {
             if (!_isDirty || !_isInitialized || _isGenerating) return; // Only setup if dirty and initialized
 
-            if (!_voxelPositions.Any())
-            {
-                // Chunk is empty (e.g., all air), clean up old buffers if they exist
-                DisposeBuffers(); // Ensure cleanup happens on the correct thread
-                _isDirty = false;
-                return;
-            }
-
             List<float> vertexData = new List<float>();
             float[] cubeVertices = CubeData.Vertices; // Get from static class
             int vertexStride = CubeData.VertexStride; // Get from static class
 
-            foreach(var height in _voxelPositions.Keys)
+            for (byte y = 0; y < ChunkHeight; y++)
             {
-                var voxelLayer = _voxelPositions[height];
-
-                foreach (var voxel in voxelLayer)
+                var layer = _layers[y];
+                if (layer == null) continue;
+                for (byte x = 0; x < ChunkSize; x++)
                 {
-                    var blockPosition = VoxelIndexToCoords(voxel);
-                    int worldPosition_X = WorldOffset.X + blockPosition.X;
-                    int worldPosition_Z = WorldOffset.Z + blockPosition.Z;
-
-                    for (int j = 0; j < cubeVertices.Length; j += vertexStride)
+                    for (byte z = 0; z < ChunkSize; z++)
                     {
-                        // Position (already in world space)
-                        vertexData.Add(cubeVertices[j + 0] + worldPosition_X);
-                        vertexData.Add(cubeVertices[j + 1] + height);
-                        vertexData.Add(cubeVertices[j + 2] + worldPosition_Z);
-                        // Color (using predefined cube face colors for now)
-                        vertexData.Add(cubeVertices[j + 3]);
-                        vertexData.Add(cubeVertices[j + 4]);
-                        vertexData.Add(cubeVertices[j + 5]);
-                        // Normal
-                        vertexData.Add(cubeVertices[j + 6]);
-                        vertexData.Add(cubeVertices[j + 7]);
-                        vertexData.Add(cubeVertices[j + 8]);
-                        // TexCoord (New)
-                        vertexData.Add(cubeVertices[j + 9]);
-                        vertexData.Add(cubeVertices[j + 10]);
+                        if (layer[x, z] != 0)
+                        {
+                            int worldPosition_X = WorldOffset.X + x;
+                            int worldPosition_Z = WorldOffset.Z + z;
+
+                            for (int j = 0; j < cubeVertices.Length; j += vertexStride)
+                            {
+                                // Position (already in world space)
+                                vertexData.Add(cubeVertices[j + 0] + worldPosition_X);
+                                vertexData.Add(cubeVertices[j + 1] + y);
+                                vertexData.Add(cubeVertices[j + 2] + worldPosition_Z);
+                                // Color (using predefined cube face colors for now)
+                                vertexData.Add(cubeVertices[j + 3]);
+                                vertexData.Add(cubeVertices[j + 4]);
+                                vertexData.Add(cubeVertices[j + 5]);
+                                // Normal
+                                vertexData.Add(cubeVertices[j + 6]);
+                                vertexData.Add(cubeVertices[j + 7]);
+                                vertexData.Add(cubeVertices[j + 8]);
+                                // TexCoord (New)
+                                vertexData.Add(cubeVertices[j + 9]);
+                                vertexData.Add(cubeVertices[j + 10]);
+                            }
+                        }
                     }
                 }
             }
@@ -200,20 +215,20 @@ namespace VoxelGame
         // Dispose OpenGL buffers (MUST be called from the main/OpenGL thread)
         private void DisposeBuffers()
         {
-             if (_vbo != 0)
-             {
-                 GL.DeleteBuffer(_vbo);
-                 _vbo = 0;
-             }
-             if (_vao != 0)
-             {
-                 GL.DeleteVertexArray(_vao);
-                 _vao = 0;
-             }
-             _vertexCount = 0;
-             _isInitialized = false; // Needs regeneration if loaded again
-             _isDirty = true;
-             // Console.WriteLine($"Disposed buffers for chunk {ChunkCoords}");
+            if (_vbo != 0)
+            {
+                GL.DeleteBuffer(_vbo);
+                _vbo = 0;
+            }
+            if (_vao != 0)
+            {
+                GL.DeleteVertexArray(_vao);
+                _vao = 0;
+            }
+            _vertexCount = 0;
+            _isInitialized = false; // Needs regeneration if loaded again
+            _isDirty = true;
+            // Console.WriteLine($"Disposed buffers for chunk {ChunkCoords}");
         }
 
         // Dispose method (MUST be called from the main/OpenGL thread)

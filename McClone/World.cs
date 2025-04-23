@@ -237,9 +237,6 @@ namespace VoxelGame
             int maxHeightToCheck = (int)center.Y + 3; // Maximum height to check
 
             List<Vector3> nearbyVoxels = new List<Vector3>();
-            // float radiusSq = radius * radius; // Not currently used
-
-            // Determine the range of chunks to check based on radius
             int centerChunkX = (int)Math.Floor(center.X / Chunk.ChunkSize);
             int centerChunkZ = (int)Math.Floor(center.Z / Chunk.ChunkSize);
             int chunkRadius = 1;
@@ -248,29 +245,16 @@ namespace VoxelGame
             {
                 for (int cz = centerChunkZ - chunkRadius; cz <= centerChunkZ + chunkRadius; cz++)
                 {
-                    // Use TryGetValue for thread-safe access
                     if (_activeChunks.TryGetValue((cx, cz), out var chunk) && chunk.IsReadyToDraw)
                     {
-                        // Have all chunks in a ring around the player for collision checks.
-
-                        // Get voxel positions (reference to all blocks)
-                        var voxelPositions = chunk.GetVoxelPositions();
-
-                        for (int h = minHeightToCheck; h < maxHeightToCheck; h++)
+                        // Use new efficient method for voxel lookup
+                        foreach (var (y, layer) in chunk.GetVoxelPositionsByY())
                         {
-                            if (voxelPositions.ContainsKey((byte)h))
+                            if (y < minHeightToCheck || y >= maxHeightToCheck) continue;
+                            foreach (var (x, z) in layer)
                             {
-                                // Loop through all voxels in the chunk
-                                foreach (byte voxel in voxelPositions[(byte)h])
-                                {
-                                    var localCoords = Chunk.VoxelIndexToCoords(voxel);
-                                    // Convert to world coordinates
-                                    Vector3 worldVoxelPos = new Vector3(chunk.WorldOffset.X + localCoords.X, h, chunk.WorldOffset.Z + localCoords.Z);
-                                    //if (Vector3.DistanceSquared(worldVoxelPos, center) < 2.0f * 2.0f) // Check distance
-                                    //{
-                                        nearbyVoxels.Add(worldVoxelPos); // Add to list
-                                    //}
-                                }
+                                Vector3 worldVoxelPos = new Vector3(chunk.WorldOffset.X + x, y, chunk.WorldOffset.Z + z);
+                                nearbyVoxels.Add(worldVoxelPos);
                             }
                         }
                     }
