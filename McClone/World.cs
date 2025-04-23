@@ -18,7 +18,7 @@ namespace VoxelGame
 
         // World Generation Parameters
         private Perlin _noiseModule = new();
-        public const float NoiseScale = 0.03f;
+        public const float NoiseScale = 0.05f;
         public const int NoiseOctaves = 6;
         public const float TerrainAmplitude = 15f; // Increased amplitude
         public const int BaseHeight = 50; // Base ground level
@@ -34,9 +34,6 @@ namespace VoxelGame
         private CancellationTokenSource _cancellationSource = new();
         private Task _generationTask = null!;
 
-        // Height Map (sparse, populated by chunks) - Needs thread-safe access
-        private ConcurrentDictionary<(int x, int z), int> _terrainHeightMap = new();
-
         // Fog Parameters
         public Vector3 FogColor { get; set; } = new Vector3(0.5f, 0.75f, 0.9f); // Match clear color
         public float FogDensity { get; set; } = 0.015f; // Exponential fog density
@@ -44,7 +41,7 @@ namespace VoxelGame
 
         public World()
         {
-            _noiseModule.Seed = new Random().Next();
+            _noiseModule.Seed = 5;//new Random().Next();
             _noiseModule.OctaveCount = NoiseOctaves;
             _noiseModule.Persistence = 0.5; // Default persistence
             _noiseModule.Lacunarity = 2.0; // Default lacunarity
@@ -234,15 +231,18 @@ namespace VoxelGame
 
 
         // Method to get voxel positions relevant for collision near a point
-        public List<Vector3> GetNearbyVoxelPositions(Vector3 center, float radius)
+        public List<Vector3> GetNearbyVoxelPositions(Vector3 center)
         {
+            int minHeightToCheck = (int)center.Y - 2; // Minimum height to check
+            int maxHeightToCheck = (int)center.Y + 3; // Maximum height to check
+
             List<Vector3> nearbyVoxels = new List<Vector3>();
             // float radiusSq = radius * radius; // Not currently used
 
             // Determine the range of chunks to check based on radius
             int centerChunkX = (int)Math.Floor(center.X / Chunk.ChunkSize);
             int centerChunkZ = (int)Math.Floor(center.Z / Chunk.ChunkSize);
-            int chunkRadius = (int)Math.Ceiling(radius / Chunk.ChunkSize) + 1; // Check slightly larger area
+            int chunkRadius = 1;
 
             for (int cx = centerChunkX - chunkRadius; cx <= centerChunkX + chunkRadius; cx++)
             {
@@ -251,11 +251,28 @@ namespace VoxelGame
                     // Use TryGetValue for thread-safe access
                     if (_activeChunks.TryGetValue((cx, cz), out var chunk) && chunk.IsReadyToDraw)
                     {
-                        // A simple approach: add all voxels from nearby ready chunks.
-                        // Optimization: Could filter voxels within the chunk that are actually close to 'center'.
-                        // For now, let the CollisionManager handle the precise distance check.
-                        // Note: Accessing GetVoxelPositions might need locking if chunks could be modified after generation. Currently, they are not.
-                        nearbyVoxels.AddRange(chunk.GetVoxelPositions());
+                        // Have all chunks in a ring around the player for collision checks.
+
+                        // Get voxel positions (reference to all blocks)
+                        var voxelPositions = chunk.GetVoxelPositions();
+
+                        for (int h = minHeightToCheck; h < maxHeightToCheck; h++)
+                        {
+                            if (voxelPositions.ContainsKey((byte)h))
+                            {
+                                // Loop through all voxels in the chunk
+                                foreach (byte voxel in voxelPositions[(byte)h])
+                                {
+                                    var localCoords = Chunk.VoxelIndexToCoords(voxel);
+                                    // Convert to world coordinates
+                                    Vector3 worldVoxelPos = new Vector3(chunk.WorldOffset.X + localCoords.X, h, chunk.WorldOffset.Z + localCoords.Z);
+                                    //if (Vector3.DistanceSquared(worldVoxelPos, center) < 2.0f * 2.0f) // Check distance
+                                    //{
+                                        nearbyVoxels.Add(worldVoxelPos); // Add to list
+                                    //}
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -265,14 +282,9 @@ namespace VoxelGame
         // Thread-safe way to get height from cache
         public int GetHeight(int worldX, int worldZ)
         {
-            if (_terrainHeightMap.TryGetValue((worldX, worldZ), out int height))
-            {
-                return height;
-            }
-
             // Fallback: Calculate on the fly using noise
             double noiseValue = GetNoiseValue(worldX, worldZ); // Use helper
-            int calculatedHeight = BaseHeight + (int)Math.Round((noiseValue + 1.0) / 2.0 * TerrainAmplitude);
+            byte calculatedHeight = (byte)Math.Max(byte.MinValue, Math.Min(byte.MaxValue, BaseHeight + Math.Round((noiseValue + 1.0) / 2.0 * TerrainAmplitude)));
             // Optionally cache this calculated value? Be careful about cache size.
             // _terrainHeightMap.TryAdd((worldX, worldZ), calculatedHeight); // Use TryAdd for thread safety
             return calculatedHeight;
@@ -283,12 +295,6 @@ namespace VoxelGame
         {
              // SharpNoise Perlin is generally considered thread-safe for reads if Seed/OctaveCount etc. aren't changed after initialization.
              return _noiseModule.GetValue(worldX * NoiseScale, 0, worldZ * NoiseScale);
-        }
-
-        // Helper to cache height (potentially accessed by multiple threads)
-        internal void SetTerrainHeight(int worldX, int worldZ, int height)
-        {
-            _terrainHeightMap[(worldX, worldZ)] = height; // ConcurrentDictionary handles locking internally
         }
 
 
@@ -392,7 +398,6 @@ namespace VoxelGame
                 chunk.Dispose();
             }
             _activeChunks.Clear();
-            _terrainHeightMap.Clear();
 
             // Dispose task-related resources
             _generationQueue.Dispose();

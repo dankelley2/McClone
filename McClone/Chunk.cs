@@ -13,9 +13,10 @@ namespace VoxelGame
         public const int ChunkHeight = 128; // Max height of a chunk column
 
         public Vector2i ChunkCoords { get; } // (ChunkX, ChunkZ)
-        public Vector3 WorldOffset => new Vector3(ChunkCoords.X * ChunkSize, 0, ChunkCoords.Y * ChunkSize);
+        public Vector3i WorldOffset { get; } // (ChunkX * ChunkSize, 0, ChunkZ * ChunkSize)
 
-        private List<Vector3> _voxelPositions = new();
+        // Dictionary where height is key, and layer of voxels is value
+        private Dictionary<byte, List<byte>> _voxelPositions = new();
 
         private int _vao = 0;
         private int _vbo = 0;
@@ -29,6 +30,7 @@ namespace VoxelGame
         public Chunk(Vector2i coords, World parentWorld)
         {
             ChunkCoords = coords;
+            WorldOffset = new Vector3i(ChunkCoords.X * ChunkSize, 0, ChunkCoords.Y * ChunkSize);
             _parentWorld = parentWorld;
         }
 
@@ -36,7 +38,7 @@ namespace VoxelGame
         internal bool IsDirty => _isDirty; // Add internal getter
 
         // Add internal getter for voxel positions
-        internal List<Vector3> GetVoxelPositions() => _voxelPositions; // Note: Access should be synchronized if modified after generation
+        internal Dictionary<byte, List<byte>> GetVoxelPositions() => _voxelPositions; // Note: Access should be synchronized if modified after generation
 
         // Generates terrain data for this chunk (Called from background thread)
         public void GenerateTerrain()
@@ -55,27 +57,30 @@ namespace VoxelGame
             {
                 _voxelPositions.Clear();
 
-                for (int x = 0; x < ChunkSize; x++)
+                for (int i = 0; i < ChunkSize * ChunkSize; i++)
                 {
-                    for (int z = 0; z < ChunkSize; z++)
+                    var coords = VoxelIndexToCoords((byte)i);
+
+                    // Use noise module from parent world (thread-safe read assumed for SharpNoise)
+                    double noiseValue = _parentWorld.GetNoiseValue(WorldOffset.X + coords.X, WorldOffset.Z + coords.Z); // Use helper method
+                    byte height = (byte)Math.Max(byte.MinValue, Math.Min(byte.MaxValue, World.BaseHeight + Math.Round((noiseValue + 1.0) / 2.0 * World.TerrainAmplitude)));
+
+                    // Generate column of voxels within chunk height limits
+                    //for (byte y = World.BaseHeight - 5; y <= height && y < ChunkHeight; y++)
+                    //{
+                    //if (!_voxelPositions.ContainsKey(y))
+                    //{
+                    //    _voxelPositions[y] = new List<byte>();
+                    //}
+                    //_voxelPositions[y].Add((byte)i);
+                    //}
+
+                    if (!_voxelPositions.ContainsKey(height))
                     {
-                        int worldX = ChunkCoords.X * ChunkSize + x;
-                        int worldZ = ChunkCoords.Y * ChunkSize + z;
-
-                        // Use noise module from parent world (thread-safe read assumed for SharpNoise)
-                        double noiseValue = _parentWorld.GetNoiseValue(worldX, worldZ); // Use helper method
-                        int height = World.BaseHeight + (int)Math.Round((noiseValue + 1.0) / 2.0 * World.TerrainAmplitude);
-
-                        // Cache height in parent world's map (needs thread-safe dictionary)
-                        _parentWorld.SetTerrainHeight(worldX, worldZ, height);
-
-                        // Generate column of voxels within chunk height limits
-                        for (int y = World.BaseHeight - 5; y <= height && y < ChunkHeight; y++)
-                        {
-                            Vector3 blockPos = new(worldX, y, worldZ);
-                            _voxelPositions.Add(blockPos);
-                        }
+                        _voxelPositions[height] = new List<byte>();
                     }
+                    _voxelPositions[height].Add((byte)i);
+
                 }
             }
             finally // Ensure flags are reset even if an error occurs
@@ -86,6 +91,13 @@ namespace VoxelGame
                 _isInitialized = true; // Mark as generated
             }
             // Console.WriteLine($"Generated terrain for chunk {ChunkCoords} on thread {Thread.CurrentThread.ManagedThreadId}");
+        }
+
+        public static (byte X,byte Z) VoxelIndexToCoords(byte index)
+        {
+            byte x = (byte)(index % ChunkSize);
+            byte z = (byte)(index / ChunkSize);
+            return new (x,z);
         }
 
         // Sets up OpenGL buffers for this chunk (MUST be called from the main/OpenGL thread)
@@ -105,27 +117,34 @@ namespace VoxelGame
             float[] cubeVertices = CubeData.Vertices; // Get from static class
             int vertexStride = CubeData.VertexStride; // Get from static class
 
-            for (int i = 0; i < _voxelPositions.Count; i++)
+            foreach(var height in _voxelPositions.Keys)
             {
-                Vector3 pos = _voxelPositions[i];
+                var voxelLayer = _voxelPositions[height];
 
-                for (int j = 0; j < cubeVertices.Length; j += vertexStride)
+                foreach (var voxel in voxelLayer)
                 {
-                    // Position (already in world space)
-                    vertexData.Add(cubeVertices[j + 0] + pos.X);
-                    vertexData.Add(cubeVertices[j + 1] + pos.Y);
-                    vertexData.Add(cubeVertices[j + 2] + pos.Z);
-                    // Color (using predefined cube face colors for now)
-                    vertexData.Add(cubeVertices[j + 3]);
-                    vertexData.Add(cubeVertices[j + 4]);
-                    vertexData.Add(cubeVertices[j + 5]);
-                    // Normal
-                    vertexData.Add(cubeVertices[j + 6]);
-                    vertexData.Add(cubeVertices[j + 7]);
-                    vertexData.Add(cubeVertices[j + 8]);
-                    // TexCoord (New)
-                    vertexData.Add(cubeVertices[j + 9]);
-                    vertexData.Add(cubeVertices[j + 10]);
+                    var blockPosition = VoxelIndexToCoords(voxel);
+                    int worldPosition_X = WorldOffset.X + blockPosition.X;
+                    int worldPosition_Z = WorldOffset.Z + blockPosition.Z;
+
+                    for (int j = 0; j < cubeVertices.Length; j += vertexStride)
+                    {
+                        // Position (already in world space)
+                        vertexData.Add(cubeVertices[j + 0] + worldPosition_X);
+                        vertexData.Add(cubeVertices[j + 1] + height);
+                        vertexData.Add(cubeVertices[j + 2] + worldPosition_Z);
+                        // Color (using predefined cube face colors for now)
+                        vertexData.Add(cubeVertices[j + 3]);
+                        vertexData.Add(cubeVertices[j + 4]);
+                        vertexData.Add(cubeVertices[j + 5]);
+                        // Normal
+                        vertexData.Add(cubeVertices[j + 6]);
+                        vertexData.Add(cubeVertices[j + 7]);
+                        vertexData.Add(cubeVertices[j + 8]);
+                        // TexCoord (New)
+                        vertexData.Add(cubeVertices[j + 9]);
+                        vertexData.Add(cubeVertices[j + 10]);
+                    }
                 }
             }
 

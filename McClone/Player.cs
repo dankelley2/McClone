@@ -12,9 +12,9 @@ namespace VoxelGame
         public Camera PlayerCamera { get; private set; }
 
         // Player Physics Properties
-        private const float Gravity = 25.0f;
+        private const float Gravity = 1.0f;
         private const float JumpForce = 9.0f;
-        private const float PlayerSpeed = 5.0f;
+        private const float PlayerSpeed = 20.0f;
         public Vector3 Size { get; } = new Vector3(0.6f, 1.8f, 0.6f); // Width, Height, Depth
 
         private bool _isOnGround = false;
@@ -22,6 +22,8 @@ namespace VoxelGame
 
         private CollisionManager _collisionManager;
         private World _world; // Reference to the world for collision data
+        private bool _shiftPressed = false;
+        private bool _ctrlPressed;
 
         public Player(Vector3 startPosition, float aspectRatio, CollisionManager collisionManager, World world)
         {
@@ -48,6 +50,8 @@ namespace VoxelGame
             if (input.IsKeyDown(Keys.S)) moveDir -= PlayerCamera.Front;
             if (input.IsKeyDown(Keys.A)) moveDir -= PlayerCamera.Right;
             if (input.IsKeyDown(Keys.D)) moveDir += PlayerCamera.Right;
+            _shiftPressed = input.IsKeyDown(Keys.LeftShift);
+            _ctrlPressed = input.IsKeyDown(Keys.LeftControl);
             moveDir.Y = 0; // Prevent flying
             if (moveDir.LengthSquared > 0) moveDir.Normalize();
 
@@ -59,18 +63,17 @@ namespace VoxelGame
             currentVelocity.Y -= Gravity * dt;
 
             // Calculate intended displacement
-            Vector3 horizontalDisplacement = moveDir * PlayerSpeed * dt;
+            Vector3 horizontalDisplacement = _shiftPressed ? moveDir * (PlayerSpeed * 2) * dt : moveDir * PlayerSpeed * dt;
             Vector3 verticalDisplacement = new Vector3(0, currentVelocity.Y * dt, 0);
 
             // --- Collision Detection and Response ---
             Vector3 nextPosition;
             Vector3 collisionNormal;
-            float collisionCheckRadius = 2.0f; // Check voxels within 2 units of the player
 
             // 1. Check X-axis movement
             nextPosition = currentPosition + new Vector3(horizontalDisplacement.X, 0, 0);
             // Get nearby voxels for collision check
-            List<Vector3> nearbyVoxelsX = _world.GetNearbyVoxelPositions(nextPosition, collisionCheckRadius);
+            List<Vector3> nearbyVoxelsX = _world.GetNearbyVoxelPositions(nextPosition);
             bool collisionX = _collisionManager.CheckWorldCollision(nextPosition, Size, nearbyVoxelsX, out collisionNormal);
             if (!collisionX)
             {
@@ -80,7 +83,7 @@ namespace VoxelGame
             // 2. Check Z-axis movement
             nextPosition = currentPosition + new Vector3(0, 0, horizontalDisplacement.Z);
             // Get nearby voxels for collision check
-            List<Vector3> nearbyVoxelsZ = _world.GetNearbyVoxelPositions(nextPosition, collisionCheckRadius);
+            List<Vector3> nearbyVoxelsZ = _world.GetNearbyVoxelPositions(nextPosition);
             bool collisionZ = _collisionManager.CheckWorldCollision(nextPosition, Size, nearbyVoxelsZ, out collisionNormal);
             if (!collisionZ)
             {
@@ -93,7 +96,7 @@ namespace VoxelGame
             _canJump = false; // Assume can't jump unless landed
 
             // Get nearby voxels for collision check
-            List<Vector3> nearbyVoxelsY = _world.GetNearbyVoxelPositions(nextPosition, collisionCheckRadius);
+            List<Vector3> nearbyVoxelsY = _world.GetNearbyVoxelPositions(nextPosition);
             bool collisionY = _collisionManager.CheckWorldCollision(nextPosition, Size, nearbyVoxelsY, out collisionNormal);
             if (collisionY)
             {

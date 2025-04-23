@@ -84,7 +84,7 @@ public class Game : GameWindow
         // --- Calculate Player Start Position ---
         const int StartX = 0;
         const int StartZ = 0;
-        int startHeight = _world.GetHeight(StartX, StartZ);
+        int startHeight = _world.GetHeight(StartX, StartZ) + 2;
 
         // --- Instantiate Player (needed for Size.Y, use temp aspect ratio) ---
         float tempAspectRatio = (Size.X > 0 && Size.Y > 0) ? Size.X / (float)Size.Y : 16.0f / 9.0f;
