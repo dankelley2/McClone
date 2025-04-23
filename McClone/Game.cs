@@ -4,6 +4,7 @@ using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
 using OpenTK.Mathematics;
 using System;
+using System.IO; // Added for Path.Combine and AppContext
 
 namespace VoxelGame;
 
@@ -52,13 +53,20 @@ public class Game : GameWindow
         CheckGLError("After Viewport Load");
         // --- End Test ---
 
+        // Set clear color to match fog color
         GL.ClearColor(0.5f, 0.75f, 0.9f, 1.0f);
         GL.Enable(EnableCap.DepthTest);
         GL.Enable(EnableCap.Multisample); // Enable Anti-Aliasing
         CheckGLError("After DepthTest/Multisample Enable");
 
         // Setup Shader
-        _shader = new Shader("Shaders/shader.vert", "Shaders/shader.frag");
+        // Load shaders relative to the application's base directory
+        string baseDirectory = AppContext.BaseDirectory;
+        string vertexPath = Path.Combine(baseDirectory, "Shaders", "shader.vert");
+        string fragmentPath = Path.Combine(baseDirectory, "Shaders", "shader.frag");
+        Console.WriteLine($"Loading vertex shader from: {vertexPath}");
+        Console.WriteLine($"Loading fragment shader from: {fragmentPath}");
+        _shader = new Shader(vertexPath, fragmentPath);
         CheckGLError("After Shader Load");
 
         // Calculate initial aspect ratio
@@ -76,12 +84,15 @@ public class Game : GameWindow
         // Instantiate Managers and World
         _collisionManager = new CollisionManager();
         _world = new World();
-        _world.Initialize(); // Generate world data and buffers
+        _world.Initialize(); // Initialize world structure (generates cube vertices)
+        // World data (chunks) will be loaded in the first Update based on player pos
         CheckGLError("After World Init");
 
         // Determine Player Start Position
-        const int StartX = 32; // Example fixed start X (center of 64 world)
-        const int StartZ = 32; // Example fixed start Z
+        // Start near 0,0 but let GetHeight determine the actual Y
+        const int StartX = 0;
+        const int StartZ = 0;
+        // GetHeight will now calculate based on noise if chunk isn't loaded yet
         int startHeight = _world.GetHeight(StartX, StartZ);
 
         // Instantiate Player (needed for Size.Y)
@@ -159,6 +170,10 @@ public class Game : GameWindow
              // Optionally, you might want to update player physics (gravity) even if not moving
              // _player.ApplyGravity(dt); // Example method if separated
         }
+
+        // --- Update World (Chunk Loading/Unloading) ---
+        // Pass player position to update chunk loading
+        _world.Update(_player.Position);
 
         // Camera position is updated within Player.Update
     }

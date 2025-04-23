@@ -7,6 +7,11 @@ in vec3 FragPos;     // Receive world space fragment position from vertex shader
 
 uniform vec3 viewPos; // Camera position (needs to be passed from C#) - Assuming Camera class has Position
 
+// Fog Uniforms (passed from C# World class)
+uniform vec3 fogColor;
+uniform float fogDensity;
+uniform float fogGradient; // For exp2 fog
+
 void main()
 {
     // --- Lighting Parameters ---
@@ -30,9 +35,19 @@ void main()
     float fresnelFactor = pow(1.0 - max(dot(norm, viewDir), 0.0), 2.0); // Higher power = sharper edge effect
     float edgeDarkening = mix(1.0, 0.4, fresnelFactor); // Mix between full brightness and 40% brightness based on angle
 
-    // --- Final Color ---
+    // --- Base Color Calculation ---
     vec3 lighting = (ambient + diffuse) * edgeDarkening; // Apply edge darkening to combined light
-    vec3 result = lighting * vertexColor; // Modulate object color by light
+    vec3 baseColor = lighting * vertexColor; // Modulate object color by light
 
-    FragColor = vec4(result, 1.0);
+    // --- Fog Calculation ---
+    float dist = length(viewPos - FragPos);
+    // Exponential Squared Fog (exp2) - gives denser fog faster
+    float fogFactor = exp(-pow(dist * fogDensity, fogGradient));
+    // Clamp fog factor between 0 and 1
+    fogFactor = clamp(fogFactor, 0.0, 1.0);
+
+    // --- Final Color (Mix base color with fog color) ---
+    vec3 finalColor = mix(fogColor, baseColor, fogFactor);
+
+    FragColor = vec4(finalColor, 1.0);
 }

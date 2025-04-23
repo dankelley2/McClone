@@ -97,6 +97,15 @@ public class Shader : IDisposable
         }
     }
 
+    public void SetFloat(string name, float data)
+    {
+        Use();
+        int location = GetUniformLocation(name);
+        if (location != -1)
+        {
+            GL.Uniform1(location, data);
+        }
+    }
 
     protected virtual void Dispose(bool disposing)
     {

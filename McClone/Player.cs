@@ -65,10 +65,13 @@ namespace VoxelGame
             // --- Collision Detection and Response ---
             Vector3 nextPosition;
             Vector3 collisionNormal;
+            float collisionCheckRadius = 2.0f; // Check voxels within 2 units of the player
 
             // 1. Check X-axis movement
             nextPosition = currentPosition + new Vector3(horizontalDisplacement.X, 0, 0);
-            bool collisionX = _collisionManager.CheckWorldCollision(nextPosition, Size, _world.VoxelPositions, out collisionNormal); // Store result
+            // Get nearby voxels for collision check
+            List<Vector3> nearbyVoxelsX = _world.GetNearbyVoxelPositions(nextPosition, collisionCheckRadius);
+            bool collisionX = _collisionManager.CheckWorldCollision(nextPosition, Size, nearbyVoxelsX, out collisionNormal);
             if (!collisionX)
             {
                 currentPosition = nextPosition; // Move is valid
@@ -76,7 +79,9 @@ namespace VoxelGame
 
             // 2. Check Z-axis movement
             nextPosition = currentPosition + new Vector3(0, 0, horizontalDisplacement.Z);
-            bool collisionZ = _collisionManager.CheckWorldCollision(nextPosition, Size, _world.VoxelPositions, out collisionNormal); // Store result
+            // Get nearby voxels for collision check
+            List<Vector3> nearbyVoxelsZ = _world.GetNearbyVoxelPositions(nextPosition, collisionCheckRadius);
+            bool collisionZ = _collisionManager.CheckWorldCollision(nextPosition, Size, nearbyVoxelsZ, out collisionNormal);
             if (!collisionZ)
             {
                 currentPosition = nextPosition; // Move is valid
@@ -87,7 +92,9 @@ namespace VoxelGame
             _isOnGround = false; // Assume not on ground unless collision proves otherwise
             _canJump = false; // Assume can't jump unless landed
 
-            bool collisionY = _collisionManager.CheckWorldCollision(nextPosition, Size, _world.VoxelPositions, out collisionNormal); // Store result
+            // Get nearby voxels for collision check
+            List<Vector3> nearbyVoxelsY = _world.GetNearbyVoxelPositions(nextPosition, collisionCheckRadius);
+            bool collisionY = _collisionManager.CheckWorldCollision(nextPosition, Size, nearbyVoxelsY, out collisionNormal);
             if (collisionY)
             {
                 // Collision detected vertically
