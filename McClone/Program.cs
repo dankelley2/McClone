@@ -18,20 +18,20 @@ public static class Program
         }
 
         // Keep the hint you found worked best or the recommended one
-        GLFW.WindowHint(WindowHintBool.ScaleFramebuffer, true); // Or CocoaRetinaFramebuffer if you switched back
+        //GLFW.WindowHint(WindowHintBool.ScaleFramebuffer, true); // Or CocoaRetinaFramebuffer if you switched back
         // Console.WriteLine("==> Set WindowHintBool.ScaleFramebuffer hint to TRUE");
 
         // --- Configure for Fullscreen ---
         var nativeWindowSettings = new NativeWindowSettings()
         {
             // Size might be ignored in exclusive fullscreen, but set it reasonably
-            ClientSize = new Vector2i(1920, 1080), // Or desired resolution
+            ClientSize = new Vector2i(1280, 720), // Or desired resolution
             Title = "OpenTK Voxel Game (Fullscreen)",
             APIVersion = new Version(3, 3),
             Flags = ContextFlags.ForwardCompatible,
 
             // Set the window state to Fullscreen
-            WindowState = WindowState.Fullscreen,
+            WindowState = WindowState.Normal,
 
             // Optional: Specify the primary monitor explicitly
             // CurrentMonitor = Monitors.GetPrimaryMonitor().Handle // Requires reference to Monitors class
