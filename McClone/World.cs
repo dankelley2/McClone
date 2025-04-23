@@ -18,7 +18,7 @@ namespace VoxelGame
 
         // World Generation Parameters
         private Perlin _noiseModule = new();
-        public const float NoiseScale = 0.05f;
+        public const float NoiseScale = 0.03f;
         public const int NoiseOctaves = 6;
         public const float TerrainAmplitude = 15f; // Increased amplitude
         public const int BaseHeight = 50; // Base ground level
@@ -27,7 +27,7 @@ namespace VoxelGame
         private ConcurrentDictionary<(int, int), Chunk> _activeChunks = new(); // Thread-safe dictionary
         private BlockingCollection<(int, int)> _generationQueue = new(new ConcurrentQueue<(int, int)>()); // Queue for coords needing generation
         private ConcurrentQueue<Chunk> _buildQueue = new(); // Queue for chunks ready for buffer building (on main thread)
-        private const int RenderDistance = 6;
+        private const int RenderDistance = 8;
         private const int LoadDistance = RenderDistance + 2; // Load distance slightly larger to preload
 
         // Background Task Management
@@ -44,7 +44,7 @@ namespace VoxelGame
             _noiseModule.Seed = 5;//new Random().Next();
             _noiseModule.OctaveCount = NoiseOctaves;
             _noiseModule.Persistence = 0.5; // Default persistence
-            _noiseModule.Lacunarity = 2.0; // Default lacunarity
+            _noiseModule.Lacunarity = 5.0; // Default lacunarity
         }
 
         public void Initialize()

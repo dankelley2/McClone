@@ -91,13 +91,6 @@ namespace VoxelGame
                                 _layers[y] = new byte[ChunkSize, ChunkSize];
                             _layers[y][x, z] = 1; // 1 = solid voxel
                         }
-
-                        // if (height < ChunkHeight)
-                        // {
-                        //     if (_layers[height] == null)
-                        //         _layers[height] = new byte[ChunkSize, ChunkSize];
-                        //     _layers[height][x, z] = 1; // 1 = solid voxel
-                        // }
                     }
                 }
             }
@@ -108,7 +101,6 @@ namespace VoxelGame
                 _isGenerating = false;
                 _isInitialized = true; // Mark as generated
             }
-            // Console.WriteLine($"Generated terrain for chunk {ChunkCoords} on thread {Thread.CurrentThread.ManagedThreadId}");
         }
 
         public static (byte X, byte Z) VoxelIndexToCoords(byte index)
@@ -118,10 +110,128 @@ namespace VoxelGame
             return new(x, z);
         }
 
+        // Public method to get the state of a voxel at local coordinates
+        // Returns 0 for air/out-of-bounds, >0 for solid types
+        public byte GetLocalVoxelState(int x, int y, int z)
+        {
+            // Check bounds first
+            if (y < 0 || y >= ChunkHeight || x < 0 || x >= ChunkSize || z < 0 || z >= ChunkSize)
+            {
+                return 0; // Outside chunk bounds is air
+            }
+
+            // Check if the layer exists
+            var layer = _layers[y];
+            if (layer == null)
+            {
+                return 0; // Null layer means air
+            }
+
+            // Return the voxel state (e.g., 1 for solid, 0 for air)
+            return layer[x, z];
+        }
+
+        // Helper: Checks if a voxel at the given *local* chunk coordinates is solid.
+        // Handles boundary checks and null layers.
+        // Note: This is now less used externally, GetLocalVoxelState is preferred for world checks.
+        private bool IsVoxelSolid(int x, int y, int z)
+        {
+            return GetLocalVoxelState(x, y, z) != 0;
+        }
+
+        // Helper: Checks if a voxel at (x, y, z) has an exposed face and returns which faces are exposed
+        // Face order MUST match CubeData.Vertices: 0=+Z, 1=-Z, 2=-X, 3=+X, 4=-Y, 5=+Y
+        private List<int> GetExposedFaces(byte x, byte y, byte z)
+        {
+            var exposedFaces = new List<int>();
+            (int dx, int dy, int dz)[] directions = new (int, int, int)[] {
+                ( 0,  0,  1),  // Front (+Z) -> Index 0
+                ( 0,  0, -1),  // Back (-Z)  -> Index 1
+                (-1,  0,  0),  // Left (-X)  -> Index 2
+                ( 1,  0,  0),  // Right (+X) -> Index 3
+                ( 0, -1,  0),  // Bottom (-Y)-> Index 4
+                ( 0,  1,  0)   // Top (+Y)   -> Index 5
+            };
+
+            for (int d = 0; d < directions.Length; d++)
+            {
+                int nx = x + directions[d].dx;
+                int ny = y + directions[d].dy;
+                int nz = z + directions[d].dz;
+
+                // Use the helper function to check the neighbor
+                // If the neighbor voxel is NOT solid, then this face 'd' is exposed.
+                if (!IsVoxelSolid(nx, ny, nz))
+                {
+                    exposedFaces.Add(d);
+                }
+            }
+            return exposedFaces;
+        }
+
+        // Helper: Adds the mesh data for a single voxel's exposed faces
+        private void AddVoxelMeshData(List<float> vertexData, byte x, byte y, byte z, List<int> exposedFaces, float[] cubeVertices, int vertexStride)
+        {
+            int worldPosition_X = WorldOffset.X + x;
+            int worldPosition_Z = WorldOffset.Z + z;
+            foreach (int d in exposedFaces)
+            {
+                int faceStart = d * 6 * vertexStride;
+                for (int j = 0; j < 6 * vertexStride; j += vertexStride)
+                {
+                    vertexData.Add(cubeVertices[faceStart + j + 0] + worldPosition_X);
+                    vertexData.Add(cubeVertices[faceStart + j + 1] + y);
+                    vertexData.Add(cubeVertices[faceStart + j + 2] + worldPosition_Z);
+                    vertexData.Add(cubeVertices[faceStart + j + 3]);
+                    vertexData.Add(cubeVertices[faceStart + j + 4]);
+                    vertexData.Add(cubeVertices[faceStart + j + 5]);
+                    vertexData.Add(cubeVertices[faceStart + j + 6]);
+                    vertexData.Add(cubeVertices[faceStart + j + 7]);
+                    vertexData.Add(cubeVertices[faceStart + j + 8]);
+                    vertexData.Add(cubeVertices[faceStart + j + 9]);
+                    vertexData.Add(cubeVertices[faceStart + j + 10]);
+                }
+            }
+        }
+
+        // Removes a block at the specified local chunk coordinates
+        public void RemoveBlock(byte x, byte y, byte z)
+        {
+            // Check bounds
+            if (y >= ChunkHeight || x >= ChunkSize || z >= ChunkSize)
+            {
+                Console.WriteLine($"Warning: Attempted to remove block outside chunk bounds at ({x},{y},{z})");
+                return;
+            }
+
+            // Check if the layer exists and the block is actually solid
+            var layer = _layers[y];
+            if (layer != null && layer[x, z] != 0)
+            {
+                layer[x, z] = 0; // Set to air
+                _isDirty = true; // Mark chunk for mesh regeneration
+
+                // Optional: Check if layer is now empty and set _layers[y] = null
+                // This adds complexity but saves memory if layers become fully empty.
+                bool layerEmpty = true;
+                for (int checkX = 0; checkX < ChunkSize; checkX++){
+                    for (int checkZ = 0; checkZ < ChunkSize; checkZ++){
+                        if(layer[checkX, checkZ] != 0) { layerEmpty = false; break; }
+                    }
+                    if (!layerEmpty) break;
+                }
+                if (layerEmpty) _layers[y] = null;
+
+                // TODO: Consider notifying neighboring chunks if the removed block was on a border
+                // This would require accessing the World object and marking neighbors as dirty.
+            }
+            // If layer is null or block is already 0, do nothing.
+        }
+
         // Sets up OpenGL buffers for this chunk (MUST be called from the main/OpenGL thread)
         public void SetupBuffers()
         {
-            if (!_isDirty || !_isInitialized || _isGenerating) return; // Only setup if dirty and initialized
+            if (!_isDirty || !_isInitialized || _isGenerating) return;
 
             List<float> vertexData = new List<float>();
             float[] cubeVertices = CubeData.Vertices; // Get from static class
@@ -135,30 +245,10 @@ namespace VoxelGame
                 {
                     for (byte z = 0; z < ChunkSize; z++)
                     {
-                        if (layer[x, z] != 0)
-                        {
-                            int worldPosition_X = WorldOffset.X + x;
-                            int worldPosition_Z = WorldOffset.Z + z;
-
-                            for (int j = 0; j < cubeVertices.Length; j += vertexStride)
-                            {
-                                // Position (already in world space)
-                                vertexData.Add(cubeVertices[j + 0] + worldPosition_X);
-                                vertexData.Add(cubeVertices[j + 1] + y);
-                                vertexData.Add(cubeVertices[j + 2] + worldPosition_Z);
-                                // Color (using predefined cube face colors for now)
-                                vertexData.Add(cubeVertices[j + 3]);
-                                vertexData.Add(cubeVertices[j + 4]);
-                                vertexData.Add(cubeVertices[j + 5]);
-                                // Normal
-                                vertexData.Add(cubeVertices[j + 6]);
-                                vertexData.Add(cubeVertices[j + 7]);
-                                vertexData.Add(cubeVertices[j + 8]);
-                                // TexCoord (New)
-                                vertexData.Add(cubeVertices[j + 9]);
-                                vertexData.Add(cubeVertices[j + 10]);
-                            }
-                        }
+                        if (layer[x, z] == 0) continue;
+                        var exposedFaces = GetExposedFaces(x, y, z);
+                        if (exposedFaces.Count > 0)
+                            AddVoxelMeshData(vertexData, x, y, z, exposedFaces, cubeVertices, vertexStride);
                     }
                 }
             }
@@ -199,7 +289,6 @@ namespace VoxelGame
             GL.BindVertexArray(0);
 
             _isDirty = false; // Buffers are now up-to-date
-            // Console.WriteLine($"Setup buffers for chunk {ChunkCoords}, Vertices: {_vertexCount}");
         }
 
         // Draw method (MUST be called from the main/OpenGL thread)
@@ -228,14 +317,12 @@ namespace VoxelGame
             _vertexCount = 0;
             _isInitialized = false; // Needs regeneration if loaded again
             _isDirty = true;
-            // Console.WriteLine($"Disposed buffers for chunk {ChunkCoords}");
         }
 
         // Dispose method (MUST be called from the main/OpenGL thread)
         public void Dispose()
         {
             DisposeBuffers();
-            // No GC.SuppressFinalize needed if not overriding finalizer
         }
     }
 }
