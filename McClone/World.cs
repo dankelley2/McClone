@@ -17,6 +17,7 @@ namespace VoxelGame
         private int _voxelVbo;
         private float[] _cubeVertices = null!;
         private int _cubeVertexCount = 0;
+        private const int _vertexStride = 9; // 3 Pos + 3 Color + 3 Normal
 
         // World Generation Parameters
         private Perlin _noiseModule = new();
@@ -54,61 +55,61 @@ namespace VoxelGame
             return BaseHeight - 5; // Or some other indicator of missing data
         }
 
-
         private void GenerateCubeVertices()
         {
-             _cubeVertices = new float[]
+            // Stride is now 9: 3 Pos, 3 Color, 3 Normal
+            _cubeVertices = new float[]
             {
-                // Position          Color (using distinct face colors for debugging)
-                // Front face (Red)
-                -0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
-                 0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
-                 0.5f,  0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
-                 0.5f,  0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
-                -0.5f,  0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
-                -0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+                // Position          Color           Normal
+                // Front face (+Z) - Normal (0, 0, 1)
+                -0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+                 0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+                 0.5f,  0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+                 0.5f,  0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+                -0.5f,  0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+                -0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
 
-                // Back face (Green)
-                -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
-                -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
-                 0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
-                 0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
-                 0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
-                -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+                // Back face (-Z) - Normal (0, 0, -1)
+                -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, -1.0f,
+                 0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, -1.0f,
+                 0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, -1.0f,
+                 0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, -1.0f,
+                -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, -1.0f,
+                -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, -1.0f,
 
-                // Left face (Blue)
-                -0.5f,  0.5f,  0.5f, 0.0f, 0.0f, 1.0f,
-                -0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 1.0f,
-                -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f,
-                -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f,
-                -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f,
-                -0.5f,  0.5f,  0.5f, 0.0f, 0.0f, 1.0f,
+                // Left face (-X) - Normal (-1, 0, 0)
+                -0.5f,  0.5f,  0.5f, 0.0f, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f,
+                -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f,
+                -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f,
+                -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f,
+                -0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f,
+                -0.5f,  0.5f,  0.5f, 0.0f, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f,
 
-                // Right face (Yellow)
-                 0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f,
-                 0.5f, -0.5f, -0.5f, 1.0f, 1.0f, 0.0f,
-                 0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f,
-                 0.5f, -0.5f, -0.5f, 1.0f, 1.0f, 0.0f,
-                 0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f,
-                 0.5f, -0.5f,  0.5f, 1.0f, 1.0f, 0.0f,
+                // Right face (+X) - Normal (1, 0, 0)
+                 0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                 0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                 0.5f, -0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                 0.5f, -0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                 0.5f, -0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                 0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
 
-                // Bottom face (Cyan)
-                -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 1.0f,
-                 0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 1.0f,
-                 0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 1.0f,
-                 0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 1.0f,
-                -0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 1.0f,
-                -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 1.0f,
+                // Bottom face (-Y) - Normal (0, -1, 0)
+                -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 1.0f, 0.0f, -1.0f, 0.0f,
+                -0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 1.0f, 0.0f, -1.0f, 0.0f,
+                 0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 1.0f, 0.0f, -1.0f, 0.0f,
+                 0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 1.0f, 0.0f, -1.0f, 0.0f,
+                 0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 1.0f, 0.0f, -1.0f, 0.0f,
+                -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 1.0f, 0.0f, -1.0f, 0.0f,
 
-                // Top face (Magenta)
-                -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 1.0f,
-                -0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f,
-                 0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f,
-                 0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f,
-                 0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 1.0f,
-                -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 1.0f
+                // Top face (+Y) - Normal (0, 1, 0)
+                -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+                 0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+                 0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+                 0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+                -0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+                -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f
             };
-            _cubeVertexCount = _cubeVertices.Length / 6; // 6 floats per vertex (3 pos, 3 color)
+            _cubeVertexCount = _cubeVertices.Length / _vertexStride; // Stride is 9 (3 pos, 3 color, 3 normal)
             CheckGLError("World.GenerateCubeVertices");
         }
 
@@ -166,20 +167,24 @@ namespace VoxelGame
                 // Vector3 color = _voxelColors[i]; // Use block-specific color if needed later
 
                 // Add all vertices for a single cube at the voxel's position
-                for (int j = 0; j < _cubeVertices.Length; j += 6) // Stride is 6 (pos+color)
+                for (int j = 0; j < _cubeVertices.Length; j += _vertexStride) // Use stride
                 {
                     // Position (offset by voxel position)
                     allVertexData.Add(_cubeVertices[j + 0] + pos.X);
                     allVertexData.Add(_cubeVertices[j + 1] + pos.Y);
                     allVertexData.Add(_cubeVertices[j + 2] + pos.Z);
-                    // Color (use the pre-defined cube face colors for now)
+                    // Color
                     allVertexData.Add(_cubeVertices[j + 3]);
                     allVertexData.Add(_cubeVertices[j + 4]);
                     allVertexData.Add(_cubeVertices[j + 5]);
+                    // Normal
+                    allVertexData.Add(_cubeVertices[j + 6]);
+                    allVertexData.Add(_cubeVertices[j + 7]);
+                    allVertexData.Add(_cubeVertices[j + 8]);
                 }
             }
 
-            Console.WriteLine($"Total vertices generated for VBO: {allVertexData.Count / 6}");
+            Console.WriteLine($"Total vertices generated for VBO: {allVertexData.Count / _vertexStride}"); // Use stride
             if (allVertexData.Count == 0)
             {
                 Console.WriteLine("ERROR: Vertex data list is empty after processing voxels!");
@@ -198,16 +203,22 @@ namespace VoxelGame
             CheckGLError("World.SetupVoxelBuffers BufferData");
 
             // --- Configure Vertex Attributes ---
-            // Assuming shader attributes are named "aPosition" and "aColor"
+            int strideBytes = _vertexStride * sizeof(float);
+
             // Position attribute (location = 0)
-            GL.EnableVertexAttribArray(0); // Use layout location = 0
-            GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 6 * sizeof(float), 0);
+            GL.EnableVertexAttribArray(0);
+            GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, strideBytes, 0); // Use strideBytes
             CheckGLError("World.SetupVoxelBuffers AttribPointer Pos");
 
             // Color attribute (location = 1)
-            GL.EnableVertexAttribArray(1); // Use layout location = 1
-            GL.VertexAttribPointer(1, 3, VertexAttribPointerType.Float, false, 6 * sizeof(float), 3 * sizeof(float));
+            GL.EnableVertexAttribArray(1);
+            GL.VertexAttribPointer(1, 3, VertexAttribPointerType.Float, false, strideBytes, 3 * sizeof(float)); // Use strideBytes, offset 3
             CheckGLError("World.SetupVoxelBuffers AttribPointer Color");
+
+            // Normal attribute (location = 2)
+            GL.EnableVertexAttribArray(2); // Use layout location = 2
+            GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, strideBytes, 6 * sizeof(float)); // Use strideBytes, offset 6
+            CheckGLError("World.SetupVoxelBuffers AttribPointer Normal");
 
             // Unbind
             GL.BindBuffer(BufferTarget.ArrayBuffer, 0);
@@ -232,8 +243,8 @@ namespace VoxelGame
             shader.SetMatrix4("view", view);
             shader.SetMatrix4("projection", projection);
             shader.SetMatrix4("model", model);
+            shader.SetVector3("viewPos", camera.Position); // Pass camera position for lighting/effects
             CheckGLError("World.Draw SetUniforms");
-
 
             int vertexCountToDraw = VoxelPositions.Count * _cubeVertexCount;
             if (vertexCountToDraw > 0)
@@ -251,7 +262,7 @@ namespace VoxelGame
             GL.DeleteBuffer(_voxelVbo);
             GL.DeleteVertexArray(_voxelVao);
             GC.SuppressFinalize(this); // Suppress finalization
-             CheckGLError("World.Dispose");
+            CheckGLError("World.Dispose");
         }
 
         // Helper to check for errors (consider moving to a static utility class)
