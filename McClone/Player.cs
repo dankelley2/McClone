@@ -24,6 +24,8 @@ namespace VoxelGame
         private World _world; // Reference to the world for collision data
         private bool _shiftPressed = false;
         private bool _ctrlPressed;
+        private float _blockBreakCooldown = 0.0f; // Cooldown timer
+        private const float BlockBreakInterval = 0.2f; // Time between block breaks
 
         public Player(Vector3 startPosition, float aspectRatio, CollisionManager collisionManager, World world)
         {
@@ -35,12 +37,29 @@ namespace VoxelGame
 
         public void Update(float dt, KeyboardState input, MouseState mouse, bool isFirstMove, Vector2 lastMousePos)
         {
+            // Update cooldown timer
+            if (_blockBreakCooldown > 0)
+            {
+                _blockBreakCooldown -= dt;
+            }
+
             // --- Mouse Look ---
             if (!isFirstMove)
             {
                 var deltaX = mouse.X - lastMousePos.X;
                 var deltaY = mouse.Y - lastMousePos.Y;
                 PlayerCamera.ProcessMouseMovement(deltaX, deltaY);
+            }
+
+            // --- Block Breaking Input ---
+            if (mouse.IsButtonDown(MouseButton.Left) && _blockBreakCooldown <= 0) // Left click to break
+            {
+                if (_world.Raycast(PlayerCamera.Position, PlayerCamera.Front, 5.0f, out Vector3 hitBlockPos, out _)) // 5.0f is reach distance
+                {
+                    Vector3i blockToRemove = new Vector3i((int)Math.Floor(hitBlockPos.X), (int)Math.Floor(hitBlockPos.Y), (int)Math.Floor(hitBlockPos.Z));
+                    _world.RemoveBlockAt(blockToRemove);
+                    _blockBreakCooldown = BlockBreakInterval; // Reset cooldown
+                }
             }
 
             // --- Player Movement Input ---

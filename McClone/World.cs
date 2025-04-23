@@ -44,7 +44,7 @@ namespace VoxelGame
             _noiseModule.Seed = 5;//new Random().Next();
             _noiseModule.OctaveCount = NoiseOctaves;
             _noiseModule.Persistence = 0.5; // Default persistence
-            _noiseModule.Lacunarity = 5.0; // Default lacunarity
+            _noiseModule.Lacunarity = 2.0; // Default lacunarity
         }
 
         public void Initialize()
@@ -390,6 +390,126 @@ namespace VoxelGame
             GC.SuppressFinalize(this);
             CheckGLError("World.Dispose");
             Console.WriteLine("World Disposed.");
+        }
+
+        // Simple raycasting implementation
+        // Returns true if a block is hit, false otherwise.
+        // Outputs the world position of the hit block and the position of the block *before* the hit (for placement).
+        public bool Raycast(Vector3 start, Vector3 direction, float maxDistance, out Vector3 hitBlockPosition, out Vector3 adjacentBlockPosition)
+        {
+            hitBlockPosition = Vector3.Zero;
+            adjacentBlockPosition = Vector3.Zero;
+            direction.Normalize();
+            Vector3 currentPos = start;
+
+            for (float dist = 0; dist < maxDistance; dist += 0.1f) // Step along the ray
+            {
+                currentPos = start + direction * dist;
+                Vector3i blockPos = new Vector3i((int)Math.Floor(currentPos.X), (int)Math.Floor(currentPos.Y), (int)Math.Floor(currentPos.Z));
+
+                // Check if this block position is solid
+                if (GetBlockState(blockPos.X, blockPos.Y, blockPos.Z) != 0)
+                {
+                    hitBlockPosition = new Vector3(blockPos.X, blockPos.Y, blockPos.Z);
+
+                    // Calculate the position adjacent to the hit face
+                    Vector3 prevPos = start + direction * (dist - 0.11f); // Step back slightly
+                    adjacentBlockPosition = new Vector3(
+                        (int)Math.Floor(prevPos.X),
+                        (int)Math.Floor(prevPos.Y),
+                        (int)Math.Floor(prevPos.Z)
+                    );
+                    return true; // Hit!
+                }
+            }
+
+            return false; // No hit within maxDistance
+        }
+
+        // Gets the state of a block at world coordinates
+        public byte GetBlockState(int worldX, int worldY, int worldZ)
+        {
+            if (worldY < 0 || worldY >= Chunk.ChunkHeight) return 0; // Out of vertical bounds
+
+            Vector2i chunkCoords = GetChunkCoords(new Vector3(worldX, worldY, worldZ));
+            if (_activeChunks.TryGetValue((chunkCoords.X, chunkCoords.Y), out var chunk))
+            {
+                int localX = worldX - chunk.WorldOffset.X;
+                int localZ = worldZ - chunk.WorldOffset.Z;
+                // Ensure local coordinates are within the chunk bounds (0 to ChunkSize-1)
+                localX = (localX % Chunk.ChunkSize + Chunk.ChunkSize) % Chunk.ChunkSize;
+                localZ = (localZ % Chunk.ChunkSize + Chunk.ChunkSize) % Chunk.ChunkSize;
+
+                return chunk.GetLocalVoxelState(localX, worldY, localZ);
+            }
+            return 0; // Chunk not loaded or found
+        }
+
+
+        // Removes a block at the specified world coordinates
+        public void RemoveBlockAt(Vector3i worldBlockPos)
+        {
+             if (worldBlockPos.Y < 0 || worldBlockPos.Y >= Chunk.ChunkHeight) return;
+
+             Vector2i chunkCoords = GetChunkCoords(new Vector3(worldBlockPos.X, worldBlockPos.Y, worldBlockPos.Z));
+             if (_activeChunks.TryGetValue((chunkCoords.X, chunkCoords.Y), out var chunk))
+             {
+                 int localX = worldBlockPos.X - chunk.WorldOffset.X;
+                 int localZ = worldBlockPos.Z - chunk.WorldOffset.Z;
+                 // Ensure local coordinates are within the chunk bounds (0 to ChunkSize-1)
+                 localX = (localX % Chunk.ChunkSize + Chunk.ChunkSize) % Chunk.ChunkSize;
+                 localZ = (localZ % Chunk.ChunkSize + Chunk.ChunkSize) % Chunk.ChunkSize;
+
+                 // Check if the block is actually within this chunk's horizontal bounds after modulo
+                 if (worldBlockPos.X >= chunk.WorldOffset.X && worldBlockPos.X < chunk.WorldOffset.X + Chunk.ChunkSize &&
+                     worldBlockPos.Z >= chunk.WorldOffset.Z && worldBlockPos.Z < chunk.WorldOffset.Z + Chunk.ChunkSize)
+                 {
+                     // Store previous state before removing
+                     byte previousState = chunk.GetLocalVoxelState(localX, worldBlockPos.Y, localZ);
+                     if (previousState != 0) // Only proceed if it was a solid block
+                     {
+                         chunk.RemoveBlock((byte)localX, (byte)worldBlockPos.Y, (byte)localZ);
+                         // Add the modified chunk to the build queue if it's not already queued
+                         // (Simple check, might add duplicates but ProcessBuildQueue handles dirty flag)
+                         _buildQueue.Enqueue(chunk);
+
+                         // Mark neighbors dirty if block was on a border
+                         MarkNeighborsDirty(worldBlockPos.X, worldBlockPos.Z, localX, localZ);
+                     }
+                 }
+             }
+        }
+
+        // Helper to mark neighboring chunks dirty if a block is modified on a border
+        private void MarkNeighborsDirty(int worldX, int worldZ, int localX, int localZ)
+        {
+            // Check and mark neighbors if the modified block is on a chunk border
+            Action<int, int> markNeighbor = (dx, dz) => {
+                Vector2i neighborCoords = GetChunkCoords(new Vector3(worldX + dx, 0, worldZ + dz));
+                 if (_activeChunks.TryGetValue((neighborCoords.X, neighborCoords.Y), out var neighborChunk))
+                 {
+                     neighborChunk.MarkDirty();
+                     // Add the neighbor chunk to the build queue as well
+                     _buildQueue.Enqueue(neighborChunk);
+                 }
+            };
+
+            bool onXBorder = localX == 0 || localX == Chunk.ChunkSize - 1;
+            bool onZBorder = localZ == 0 || localZ == Chunk.ChunkSize - 1;
+
+            if (localX == 0) markNeighbor(-1, 0); // Left neighbor
+            if (localX == Chunk.ChunkSize - 1) markNeighbor(1, 0); // Right neighbor
+            if (localZ == 0) markNeighbor(0, -1); // Back neighbor
+            if (localZ == Chunk.ChunkSize - 1) markNeighbor(0, 1); // Front neighbor
+
+            // Only check diagonals if it was on a corner
+            if (onXBorder && onZBorder)
+            {
+                if (localX == 0 && localZ == 0) markNeighbor(-1, -1); // Bottom-Left
+                if (localX == Chunk.ChunkSize - 1 && localZ == 0) markNeighbor(1, -1); // Bottom-Right
+                if (localX == 0 && localZ == Chunk.ChunkSize - 1) markNeighbor(-1, 1); // Top-Left
+                if (localX == Chunk.ChunkSize - 1 && localZ == Chunk.ChunkSize - 1) markNeighbor(1, 1); // Top-Right
+            }
         }
 
         // Helper to check for errors

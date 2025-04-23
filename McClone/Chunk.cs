@@ -194,6 +194,12 @@ namespace VoxelGame
             }
         }
 
+        // Public method to mark the chunk as dirty, forcing a mesh rebuild
+        public void MarkDirty()
+        {
+            _isDirty = true;
+        }
+
         // Removes a block at the specified local chunk coordinates
         public void RemoveBlock(byte x, byte y, byte z)
         {
