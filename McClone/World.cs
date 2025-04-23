@@ -18,8 +18,8 @@ namespace VoxelGame
 
         // World Generation Parameters
         private Perlin _noiseModule = new();
-        public const float NoiseScale = 0.04f;
-        public const int NoiseOctaves = 4;
+        public const float NoiseScale = 0.03f;
+        public const int NoiseOctaves = 6;
         public const float TerrainAmplitude = 15f; // Increased amplitude
         public const int BaseHeight = 50; // Base ground level
 
