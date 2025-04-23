@@ -135,7 +135,7 @@ public class Game : GameWindow
         // --- Initial Chunk Loading Check ---
         if (!_initialLoadComplete)
         {
-            _world.ProcessBuildQueue();
+            _world.ProcessGLBufferUpdates();
 
             if (_world.AreInitialChunksReady(_initialPlayerPosition))
             {

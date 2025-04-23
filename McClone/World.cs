@@ -25,8 +25,8 @@ namespace VoxelGame
 
         // Chunk Management
         private ConcurrentDictionary<(int, int), Chunk> _activeChunks = new(); // Thread-safe dictionary
-        private BlockingCollection<(int, int)> _generationQueue = new(new ConcurrentQueue<(int, int)>()); // Queue for coords needing generation
-        private ConcurrentQueue<Chunk> _buildQueue = new(); // Queue for chunks ready for buffer building (on main thread)
+        private BlockingCollection<(int, int)> _generationQueue = new(new ConcurrentQueue<(int, int)>()); // Queue for coords needing generation or mesh rebuild
+        private ConcurrentQueue<Chunk> _buildQueue = new(); // Queue for chunks ready for GL buffer updates (on main thread)
         private const int RenderDistance = 8;
         private const int LoadDistance = RenderDistance + 2; // Load distance slightly larger to preload
 
@@ -108,26 +108,35 @@ namespace VoxelGame
         }
 
 
-        // Background task method
+        // Background task method - Handles BOTH initial terrain gen AND mesh rebuilds
         private void ProcessGenerationQueue(CancellationToken token)
         {
-            Console.WriteLine($"Generation Task started on thread {Thread.CurrentThread.ManagedThreadId}");
+            Console.WriteLine($"Generation/Rebuild Task started on thread {Thread.CurrentThread.ManagedThreadId}");
             try
             {
-                // Consume items from the queue as they arrive
                 foreach (var coord in _generationQueue.GetConsumingEnumerable(token))
                 {
                     if (token.IsCancellationRequested) break;
 
                     if (_activeChunks.TryGetValue(coord, out var chunk))
                     {
-                        // Console.WriteLine($"Generating chunk {coord}...");
-                        chunk.GenerateTerrain(); // This now happens on the background thread
-                        if (chunk._isInitialized) // Check if generation completed
+                        bool needsInitialTerrain = !chunk._isInitialized;
+                        if (needsInitialTerrain)
                         {
-                            _buildQueue.Enqueue(chunk); // Add to the build queue for the main thread
-                            // Console.WriteLine($"Chunk {coord} generated, queued for build.");
+                            // Console.WriteLine($"Generating terrain for chunk {coord}...");
+                            chunk.GenerateTerrain(); // Generates terrain, sets _isInitialized=true, _isDirty=true
                         }
+
+                        // If initialized (or just became initialized) and is marked dirty, generate mesh data
+                        if (chunk._isInitialized && chunk.IsDirty) // Check IsDirty flag
+                        {
+                            // Console.WriteLine($"Generating vertex data for chunk {coord} (Initial: {needsInitialTerrain})...");
+                            List<float> vertexData = chunk.GenerateVertexData(); // CPU-bound mesh generation
+                            chunk.PendingVertexData = vertexData; // Store data for main thread
+                            _buildQueue.Enqueue(chunk); // Add to the main thread queue for GL update
+                            // Console.WriteLine($"Chunk {coord} vertex data generated, queued for GL build.");
+                        }
+                        // Note: _isDirty is set to false only after GL update on main thread
                     }
                     else
                     {
@@ -147,30 +156,30 @@ namespace VoxelGame
             }
             finally
             {
-                Console.WriteLine("Generation Task finished.");
+                Console.WriteLine("Generation/Rebuild Task finished.");
             }
         }
 
-        // Process the build queue (MUST be called from the main/OpenGL thread)
-        public void ProcessBuildQueue()
+        // Process the build queue (MUST be called from the main/OpenGL thread) - Renamed for clarity
+        public void ProcessGLBufferUpdates() // Renamed from ProcessBuildQueue
         {
-            int builtThisFrame = 0;
-            // Reduce max builds per frame to lessen potential main thread spikes
-            int maxBuildPerFrame = 2; // Lowered from 4
+            int updatedThisFrame = 0;
+            int maxUpdatesPerFrame = 4; // Limit GL updates per frame
 
-            while (builtThisFrame < maxBuildPerFrame && _buildQueue.TryDequeue(out var chunkToBuild))
+            while (updatedThisFrame < maxUpdatesPerFrame && _buildQueue.TryDequeue(out var chunkToUpdate))
             {
-                 // Double check if the chunk still exists and needs building
-                 // Convert Vector2i to tuple for dictionary key lookup
-                 if (_activeChunks.ContainsKey((chunkToBuild.ChunkCoords.X, chunkToBuild.ChunkCoords.Y)) && chunkToBuild.IsDirty)
+                 // Check if chunk still exists and has pending data
+                 if (_activeChunks.ContainsKey((chunkToUpdate.ChunkCoords.X, chunkToUpdate.ChunkCoords.Y)) && chunkToUpdate.PendingVertexData != null)
                  {
-                    // Console.WriteLine($"Building chunk {chunkToBuild.ChunkCoords}...");
-                    chunkToBuild.SetupBuffers(); // Use the parameterless version
-                    builtThisFrame++;
+                    // Console.WriteLine($"Updating GL buffers for chunk {chunkToUpdate.ChunkCoords}...");
+                    chunkToUpdate.UpdateGLBuffers(chunkToUpdate.PendingVertexData); // Upload data to GPU
+                    chunkToUpdate.PendingVertexData = null; // Clear pending data
+                    // UpdateGLBuffers sets _isDirty = false internally
+                    updatedThisFrame++;
                  }
-                 // else Console.WriteLine($"Skipping build for chunk {chunkToBuild.ChunkCoords} (already built or removed).");
+                 // else Console.WriteLine($"Skipping GL update for chunk {chunkToUpdate.ChunkCoords} (no pending data or removed).");
             }
-            // if (builtThisFrame > 0) Console.WriteLine($"Built {builtThisFrame} chunks this frame.");
+            // if (updatedThisFrame > 0) Console.WriteLine($"Updated GL buffers for {updatedThisFrame} chunks this frame.");
         }
 
 
@@ -179,8 +188,8 @@ namespace VoxelGame
         {
             Vector2i playerChunkCoords = GetChunkCoords(playerPosition);
 
-            // --- Process Build Queue (OpenGL operations) ---
-            ProcessBuildQueue(); // Build buffers for generated chunks
+            // --- Process GL Buffer Updates (Main Thread OpenGL operations) ---
+            ProcessGLBufferUpdates(); // Renamed call
 
             // --- Identify Chunks to Load/Unload ---
             HashSet<(int, int)> requiredChunks = new HashSet<(int, int)>();
@@ -219,14 +228,15 @@ namespace VoxelGame
                     var newChunk = new Chunk(new Vector2i(coord.Item1, coord.Item2), this);
                     if (_activeChunks.TryAdd(coord, newChunk)) // Attempt to add atomically
                     {
-                        _generationQueue.Add(coord); // Add to background generation queue
-                        // Console.WriteLine($"Queued chunk {coord} for generation");
+                        // Add to background queue for terrain generation AND initial mesh data generation
+                        _generationQueue.Add(coord);
+                        // Console.WriteLine($"Queued new chunk {coord} for generation");
                     }
                     // If TryAdd fails, another thread likely added it just before, which is fine.
                 }
             }
 
-            // --- Generation and Build processing happens in ProcessGenerationQueue (background) and ProcessBuildQueue (main thread) ---
+            // --- Generation and Build processing happens in ProcessGenerationQueue (background) and ProcessGLBufferUpdates (main thread) ---
         }
 
 
@@ -477,9 +487,9 @@ namespace VoxelGame
                      if (previousState != 0) // Only proceed if it was a solid block
                      {
                          chunk.RemoveBlock((byte)localX, (byte)worldBlockPos.Y, (byte)localZ);
-                         // Add the modified chunk to the build queue if it's not already queued
-                         // (Simple check, might add duplicates but ProcessBuildQueue handles dirty flag)
-                         _buildQueue.Enqueue(chunk);
+                         // Add coordinates to background queue to trigger mesh data regeneration
+                         _generationQueue.Add((chunkCoords.X, chunkCoords.Y));
+                         // Console.WriteLine($"Queued chunk {chunkCoords} for rebuild after block removal.");
 
                          // Mark neighbors dirty if block was on a border
                          MarkNeighborsDirty(worldBlockPos.X, worldBlockPos.Z, localX, localZ);
@@ -497,8 +507,9 @@ namespace VoxelGame
                  if (_activeChunks.TryGetValue((neighborCoords.X, neighborCoords.Y), out var neighborChunk))
                  {
                      neighborChunk.MarkDirty();
-                     // Add the neighbor chunk to the build queue as well
-                     _buildQueue.Enqueue(neighborChunk);
+                     // Add neighbor coordinates to background queue for mesh data regeneration
+                     _generationQueue.Add((neighborCoords.X, neighborCoords.Y));
+                     // Console.WriteLine($"Queued neighbor chunk {neighborCoords} for rebuild.");
                  }
             };
 
