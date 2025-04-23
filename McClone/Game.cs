@@ -126,6 +126,13 @@ public class Game : GameWindow
         _world.Draw(_shader, _camera, _blockTexture, targetedBlock);
         CheckGLError("RenderFrame World Draw");
 
+        // --- Wireframe Highlight Pass ---
+        if (targetedBlock.HasValue)
+        {
+            _world.DrawBlockWireframe(_shader, _camera, targetedBlock.Value);
+            CheckGLError("RenderFrame Wireframe Highlight");
+        }
+
         SwapBuffers();
         CheckGLError("RenderFrame SwapBuffers");
     }

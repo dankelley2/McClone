@@ -60,14 +60,14 @@ void main()
         if (isFragInHighlightBlock)
         {
             // Apply highlight effect - e.g., add white tint
-            baseColor = mix(baseColor, vec3(1.0, 1.0, 1.0), 0.25); // Mix 25% white
+            //baseColor = mix(baseColor, vec3(1.0, 1.0, 1.0), 0.25); // Mix 25% white
 
             // --- Alternative: Edge Highlighting (using distance from center) ---
-            // vec3 blockCenter = highlightedBlockPos + vec3(0.5);
-            // vec3 distToCenter = abs(FragPos - blockCenter);
-            // float maxDist = max(distToCenter.x, max(distToCenter.y, distToCenter.z));
-            // float edgeFactor = smoothstep(0.45, 0.5, maxDist); // Highlight near the 0.5 boundary
-            // baseColor = mix(baseColor, vec3(1.0, 1.0, 1.0), edgeFactor * 0.5); // Mix white at edges
+            vec3 blockCenter = highlightedBlockPos + vec3(0.5);
+            vec3 distToCenter = abs(FragPos - blockCenter);
+            float maxDist = max(distToCenter.x, max(distToCenter.y, distToCenter.z));
+            float edgeFactor = smoothstep(0.45, 0.5, maxDist); // Highlight near the 0.5 boundary
+            baseColor = mix(baseColor, vec3(1.0, 1.0, 1.0), edgeFactor * 0.5); // Mix white at edges
         }
     }
 

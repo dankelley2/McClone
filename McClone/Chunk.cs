@@ -16,7 +16,8 @@ namespace VoxelGame
         public Vector3i WorldOffset { get; } // (ChunkX * ChunkSize, 0, ChunkZ * ChunkSize)
 
         // Compressed voxel storage: one 2D array per Y layer, null if empty
-        private byte[][,] _layers = new byte[ChunkHeight][,];
+        // Allow nulls for empty layers
+        private byte[,]?[] _layers = new byte[ChunkHeight][,];
 
         private int _vao = 0;
         private int _vbo = 0;
@@ -89,9 +90,14 @@ namespace VoxelGame
                         byte height = (byte)Math.Max(byte.MinValue, Math.Min(byte.MaxValue, World.BaseHeight + Math.Round((noiseValue + 1.0) / 2.0 * World.TerrainAmplitude)));
                         
                         for (byte y = World.BaseHeight - 1; y <= height && y < ChunkHeight; y++){
-                            if (_layers[y] == null)
-                                _layers[y] = new byte[ChunkSize, ChunkSize];
-                            _layers[y][x, z] = 1; // 1 = solid voxel
+                            byte[,]? currentLayer = _layers[y]; // Assign to nullable local var
+                            if (currentLayer == null)
+                            {
+                                currentLayer = new byte[ChunkSize, ChunkSize];
+                                _layers[y] = currentLayer; // Assign back to the array
+                            }
+                            // Now the compiler knows currentLayer is not null here
+                            currentLayer[x, z] = 1; // 1 = solid voxel
                         }
                     }
                 }
@@ -174,16 +180,20 @@ namespace VoxelGame
         // Helper: Adds the mesh data for a single voxel's exposed faces
         private void AddVoxelMeshData(List<float> vertexData, byte x, byte y, byte z, List<int> exposedFaces, float[] cubeVertices, int vertexStride)
         {
-            int worldPosition_X = WorldOffset.X + x;
-            int worldPosition_Z = WorldOffset.Z + z;
+            // Calculate the integer world coordinates of the block's corner
+            int worldCornerX = WorldOffset.X + x;
+            int worldCornerY = y;
+            int worldCornerZ = WorldOffset.Z + z;
+
             foreach (int d in exposedFaces)
             {
                 int faceStart = d * 6 * vertexStride;
                 for (int j = 0; j < 6 * vertexStride; j += vertexStride)
                 {
-                    vertexData.Add(cubeVertices[faceStart + j + 0] + worldPosition_X);
-                    vertexData.Add(cubeVertices[faceStart + j + 1] + y);
-                    vertexData.Add(cubeVertices[faceStart + j + 2] + worldPosition_Z);
+                    // Add base vertex position (centered around 0,0,0) + 0.5 offset + integer world corner
+                    vertexData.Add(cubeVertices[faceStart + j + 0] + 0.5f + worldCornerX);
+                    vertexData.Add(cubeVertices[faceStart + j + 1] + 0.5f + worldCornerY);
+                    vertexData.Add(cubeVertices[faceStart + j + 2] + 0.5f + worldCornerZ);
                     vertexData.Add(cubeVertices[faceStart + j + 3]);
                     vertexData.Add(cubeVertices[faceStart + j + 4]);
                     vertexData.Add(cubeVertices[faceStart + j + 5]);
@@ -244,7 +254,7 @@ namespace VoxelGame
 
             for (byte y = 0; y < ChunkHeight; y++)
             {
-                var layer = _layers[y];
+                var layer = _layers[y]; // layer is now potentially null
                 if (layer == null) continue;
 
                 for (byte x = 0; x < ChunkSize; x++)

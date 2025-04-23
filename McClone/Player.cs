@@ -16,7 +16,7 @@ namespace VoxelGame
         private const float Gravity = 25.0f;
         private const float JumpForce = 9.0f;
         private const float PlayerSpeed = 5.0f;
-        public Vector3 Size { get; } = new Vector3(0.6f, 1f, 0.6f); // Width, Height, Depth
+        public Vector3 Size { get; } = new Vector3(0.6f, 1.8f, 0.6f); // Width, Height, Depth
         public float EyeHeight => Size.Y * 0.9f; // Eye level relative to feet position (e.g., 90% of height)
 
         private bool _isOnGround = false;

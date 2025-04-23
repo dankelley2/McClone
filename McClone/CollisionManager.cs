@@ -36,15 +36,15 @@ public class CollisionManager
         float height = aabbSize.Y;
         float halfDepth = aabbSize.Z / 2.0f;
 
-        // Define the AABB bounds based on checkPosition (assuming checkPosition is head)
+        // Define the AABB bounds based on checkPosition (player's feet position)
         Vector3 aabbMin = new Vector3(
             checkPosition.X - halfWidth,
-            checkPosition.Y - height, // Feet position
+            checkPosition.Y, // Feet position Y
             checkPosition.Z - halfDepth
         );
         Vector3 aabbMax = new Vector3(
             checkPosition.X + halfWidth,
-            checkPosition.Y, // Head position
+            checkPosition.Y + height, // Top of head position Y
             checkPosition.Z + halfDepth
         );
 
@@ -57,23 +57,21 @@ public class CollisionManager
         int minZ = (int)MathF.Floor(aabbMin.Z - VoxelCheckRadius);
         int maxZ = (int)MathF.Ceiling(aabbMax.Z + VoxelCheckRadius);
 
-        bool collided = false;
-
         // Iterate through nearby blocks
         // WARNING: Iterating the full list is SLOW for large worlds!
-        foreach (Vector3 blockCenter in voxelPositions)
+        foreach (Vector3 blockCorner in voxelPositions)
         {
             // Broad-phase check: Only consider blocks roughly within the checking radius
-            if (blockCenter.X < minX || blockCenter.X > maxX ||
-                blockCenter.Y < minY || blockCenter.Y > maxY ||
-                blockCenter.Z < minZ || blockCenter.Z > maxZ)
+            if (blockCorner.X < minX || blockCorner.X > maxX ||
+                blockCorner.Y < minY || blockCorner.Y > maxY ||
+                blockCorner.Z < minZ || blockCorner.Z > maxZ)
             {
                 continue; // Skip block if it's too far away
             }
 
-            // Define block AABB bounds (assuming blocks are 1x1x1 centered at their position)
-            Vector3 blockMin = blockCenter - new Vector3(0.5f);
-            Vector3 blockMax = blockCenter + new Vector3(0.5f);
+            // Define block AABB bounds using integer corner coordinates
+            Vector3 blockMin = blockCorner; // blockCorner is the integer coordinate (e.g., 10, 5, 20)
+            Vector3 blockMax = blockCorner + Vector3.One; // Extends to (11, 6, 21)
 
             // Narrow-phase check: AABB Intersection Test
             bool intersects = (aabbMax.X > blockMin.X &&
@@ -85,26 +83,28 @@ public class CollisionManager
 
             if (intersects)
             {
-                collided = true;
+                // Simplistic normal calculation - based on minimum penetration
+                // Calculate overlaps on each axis
+                float overlapX1 = aabbMax.X - blockMin.X;
+                float overlapX2 = blockMax.X - aabbMin.X;
+                float overlapY1 = aabbMax.Y - blockMin.Y;
+                float overlapY2 = blockMax.Y - aabbMin.Y;
+                float overlapZ1 = aabbMax.Z - blockMin.Z;
+                float overlapZ2 = blockMax.Z - aabbMin.Z;
 
-                // Simplistic normal calculation (same as before)
-                float dx1 = aabbMax.X - blockMin.X; // Penetration from left
-                float dx2 = blockMax.X - aabbMin.X; // Penetration from right
-                float dy1 = aabbMax.Y - blockMin.Y; // Penetration from bottom
-                float dy2 = blockMax.Y - aabbMin.Y; // Penetration from top
-                float dz1 = aabbMax.Z - blockMin.Z; // Penetration from front
-                float dz2 = blockMax.Z - aabbMin.Z; // Penetration from back
-
-                // Find minimum penetration depth (smallest overlap)
+                // Find minimum overlap
                 float minOverlap = float.MaxValue;
                 Vector3 potentialNormal = Vector3.Zero;
 
-                if (dx1 < minOverlap) { minOverlap = dx1; potentialNormal = -Vector3.UnitX; }
-                if (dx2 < minOverlap) { minOverlap = dx2; potentialNormal = Vector3.UnitX; }
-                if (dy1 < minOverlap) { minOverlap = dy1; potentialNormal = -Vector3.UnitY; } // Feet hit ground from top
-                if (dy2 < minOverlap) { minOverlap = dy2; potentialNormal = Vector3.UnitY; } // Head hit ceiling from bottom
-                if (dz1 < minOverlap) { minOverlap = dz1; potentialNormal = -Vector3.UnitZ; }
-                if (dz2 < minOverlap) { minOverlap = dz2; potentialNormal = Vector3.UnitZ; }
+                // Check positive overlaps (penetration from negative side)
+                if (overlapX1 > 0 && overlapX1 < minOverlap) { minOverlap = overlapX1; potentialNormal = -Vector3.UnitX; } // Player hit block from left
+                if (overlapY1 > 0 && overlapY1 < minOverlap) { minOverlap = overlapY1; potentialNormal = -Vector3.UnitY; } // Player hit block from below (head)
+                if (overlapZ1 > 0 && overlapZ1 < minOverlap) { minOverlap = overlapZ1; potentialNormal = -Vector3.UnitZ; } // Player hit block from back
+
+                // Check negative overlaps (penetration from positive side)
+                if (overlapX2 > 0 && overlapX2 < minOverlap) { minOverlap = overlapX2; potentialNormal = Vector3.UnitX; } // Player hit block from right
+                if (overlapY2 > 0 && overlapY2 < minOverlap) { minOverlap = overlapY2; potentialNormal = Vector3.UnitY; } // Player hit block from above (feet)
+                if (overlapZ2 > 0 && overlapZ2 < minOverlap) { minOverlap = overlapZ2; potentialNormal = Vector3.UnitZ; } // Player hit block from front
 
                 collisionNormal = potentialNormal;
 
