@@ -233,33 +233,41 @@ namespace VoxelGame
         // Method to get voxel positions relevant for collision near a point
         public List<Vector3> GetNearbyVoxelPositions(Vector3 center)
         {
-            int minHeightToCheck = (int)center.Y - 2; // Minimum height to check
-            int maxHeightToCheck = (int)center.Y + 3; // Maximum height to check
-
             List<Vector3> nearbyVoxels = new List<Vector3>();
-            int centerChunkX = (int)Math.Floor(center.X / Chunk.ChunkSize);
-            int centerChunkZ = (int)Math.Floor(center.Z / Chunk.ChunkSize);
-            int chunkRadius = 1;
+            int centerX = (int)Math.Floor(center.X);
+            int centerZ = (int)Math.Floor(center.Z);
 
-            for (int cx = centerChunkX - chunkRadius; cx <= centerChunkX + chunkRadius; cx++)
+            // Define the search range around the player (1 block radius horizontally)
+            int radius = 1;
+            int minX = centerX - radius;
+            int maxX = centerX + radius;
+            int minZ = centerZ - radius;
+            int maxZ = centerZ + radius;
+
+            // Define vertical range based on player position (e.g., from feet-2 to head+1)
+            // Adjust these offsets based on player height and potential jump/fall checks
+            int minY = (int)Math.Floor(center.Y) - 2; // Check slightly below feet
+            int maxY = (int)Math.Floor(center.Y) + 2; // Check up to head height + 1
+            minY = Math.Max(0, minY); // Clamp to world bottom
+            maxY = Math.Min(Chunk.ChunkHeight - 1, maxY); // Clamp to world top
+
+            // Iterate through the 3x3xN volume around the center point
+            for (int worldY = minY; worldY <= maxY; worldY++)
             {
-                for (int cz = centerChunkZ - chunkRadius; cz <= centerChunkZ + chunkRadius; cz++)
+                for (int worldX = minX; worldX <= maxX; worldX++)
                 {
-                    if (_activeChunks.TryGetValue((cx, cz), out var chunk) && chunk.IsReadyToDraw)
+                    for (int worldZ = minZ; worldZ <= maxZ; worldZ++)
                     {
-                        // Use new efficient method for voxel lookup
-                        foreach (var (y, layer) in chunk.GetVoxelPositionsByY())
+                        // GetBlockState handles finding the correct chunk for any world coordinate
+                        if (GetBlockState(worldX, worldY, worldZ) != 0) // Check if the block is solid
                         {
-                            if (y < minHeightToCheck || y >= maxHeightToCheck) continue;
-                            foreach (var (x, z) in layer)
-                            {
-                                Vector3 worldVoxelPos = new Vector3(chunk.WorldOffset.X + x, y, chunk.WorldOffset.Z + z);
-                                nearbyVoxels.Add(worldVoxelPos);
-                            }
+                            // Add the world coordinates of the solid block
+                            nearbyVoxels.Add(new Vector3(worldX, worldY, worldZ));
                         }
                     }
                 }
             }
+
             return nearbyVoxels;
         }
 

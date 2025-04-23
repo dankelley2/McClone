@@ -12,9 +12,9 @@ namespace VoxelGame
         public Camera PlayerCamera { get; private set; }
 
         // Player Physics Properties
-        private const float Gravity = 1.0f;
+        private const float Gravity = 25.0f;
         private const float JumpForce = 9.0f;
-        private const float PlayerSpeed = 20.0f;
+        private const float PlayerSpeed = 5.0f;
         public Vector3 Size { get; } = new Vector3(0.6f, 1.8f, 0.6f); // Width, Height, Depth
 
         private bool _isOnGround = false;
