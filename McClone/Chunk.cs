@@ -16,7 +16,6 @@ namespace VoxelGame
         public Vector3 WorldOffset => new Vector3(ChunkCoords.X * ChunkSize, 0, ChunkCoords.Y * ChunkSize);
 
         private List<Vector3> _voxelPositions = new();
-        private List<Vector3> _voxelColors = new(); // Could optimize later to not store this if colors are procedural
 
         private int _vao = 0;
         private int _vbo = 0;
@@ -55,11 +54,6 @@ namespace VoxelGame
             try
             {
                 _voxelPositions.Clear();
-                _voxelColors.Clear(); // Clear colors too
-
-                Vector3 grassColor = new(0.0f, 0.8f, 0.1f);
-                Vector3 dirtColor = new(0.6f, 0.4f, 0.2f);
-                Vector3 stoneColor = new(0.5f, 0.5f, 0.5f);
 
                 for (int x = 0; x < ChunkSize; x++)
                 {
@@ -80,13 +74,6 @@ namespace VoxelGame
                         {
                             Vector3 blockPos = new(worldX, y, worldZ);
                             _voxelPositions.Add(blockPos);
-
-                            // Determine color based on height
-                            Vector3 color;
-                            if (y == height) color = grassColor;
-                            else if (y > height - 3) color = dirtColor; // Dirt layer
-                            else color = stoneColor; // Stone below dirt
-                            _voxelColors.Add(color);
                         }
                     }
                 }
@@ -117,12 +104,10 @@ namespace VoxelGame
             List<float> vertexData = new List<float>();
             float[] cubeVertices = CubeData.Vertices; // Get from static class
             int vertexStride = CubeData.VertexStride; // Get from static class
-            int cubeVertexCount = CubeData.VertexCount; // Get from static class
 
             for (int i = 0; i < _voxelPositions.Count; i++)
             {
                 Vector3 pos = _voxelPositions[i];
-                // Vector3 color = _voxelColors[i]; // Use per-block color if needed
 
                 for (int j = 0; j < cubeVertices.Length; j += vertexStride)
                 {
@@ -138,6 +123,9 @@ namespace VoxelGame
                     vertexData.Add(cubeVertices[j + 6]);
                     vertexData.Add(cubeVertices[j + 7]);
                     vertexData.Add(cubeVertices[j + 8]);
+                    // TexCoord (New)
+                    vertexData.Add(cubeVertices[j + 9]);
+                    vertexData.Add(cubeVertices[j + 10]);
                 }
             }
 
@@ -169,6 +157,9 @@ namespace VoxelGame
             // Normal (location = 2)
             GL.EnableVertexAttribArray(2);
             GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, strideBytes, 6 * sizeof(float));
+            // TexCoord (location = 3 - New)
+            GL.EnableVertexAttribArray(3);
+            GL.VertexAttribPointer(3, 2, VertexAttribPointerType.Float, false, strideBytes, 9 * sizeof(float)); // 2 floats, offset 9
 
             GL.BindBuffer(BufferTarget.ArrayBuffer, 0);
             GL.BindVertexArray(0);

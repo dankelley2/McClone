@@ -301,7 +301,8 @@ namespace VoxelGame
 
         // --- Removed GenerateCubeVertices (moved to CubeData.cs) ---
 
-        public void Draw(Shader shader, Camera camera)
+        // Modify Draw to accept a Texture
+        public void Draw(Shader shader, Camera camera, Texture texture)
         {
             shader.Use();
 
@@ -318,6 +319,10 @@ namespace VoxelGame
             shader.SetVector3("fogColor", FogColor);
             shader.SetFloat("fogDensity", FogDensity);
             shader.SetFloat("fogGradient", FogGradient);
+
+            // --- Texture Setup ---
+            texture.Use(TextureUnit.Texture0); // Activate texture unit 0 and bind the texture
+            shader.SetInt("textureSampler", 0); // Tell the shader to use texture unit 0
 
             CheckGLError("World.Draw SetUniforms");
 

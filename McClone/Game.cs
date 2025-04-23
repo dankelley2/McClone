@@ -12,6 +12,7 @@ namespace VoxelGame;
 public class Game : GameWindow
 {
     private Shader _shader = null!;
+    private Texture _blockTexture = null!; // Add Texture field
     private Camera _camera => _player.PlayerCamera; // Get camera from Player
     private World _world = null!;
     private Player _player = null!;
@@ -68,6 +69,12 @@ public class Game : GameWindow
         _shader = new Shader(vertexPath, fragmentPath);
         CheckGLError("After Shader Load");
 
+        // --- Texture Loading ---
+        // Assuming you have a "grass_block.png" in a "Textures" folder next to your executable
+        string texturePath = Path.Combine("Textures", "grass_block.png");
+        _blockTexture = new Texture(texturePath);
+        CheckGLError("After Texture Load");
+
         // --- World and Managers Initialization ---
         _collisionManager = new CollisionManager();
         _world = new World();
@@ -112,7 +119,8 @@ public class Game : GameWindow
         GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
         CheckGLError("RenderFrame Clear");
 
-        _world.Draw(_shader, _camera); // Pass shader and camera
+        // Pass the texture to the world draw call
+        _world.Draw(_shader, _camera, _blockTexture);
         CheckGLError("RenderFrame World Draw");
 
         SwapBuffers();
@@ -208,6 +216,7 @@ public class Game : GameWindow
         Console.WriteLine("Starting OnUnload...");
         _world?.Dispose();
         _shader?.Dispose();
+        _blockTexture?.Dispose(); // Dispose the texture
 
         base.OnUnload();
         CheckGLError("OnUnload");
