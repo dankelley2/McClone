@@ -39,6 +39,10 @@ namespace VoxelGame
         public float FogDensity { get; set; } = 0.015f; // Exponential fog density
         public float FogGradient { get; set; } = 2.5f; // Controls how quickly fog thickens
 
+        // Shader Uniform Location Caching
+        private int _highlightedBlockPosLocation = -1;
+        private int _isBlockHighlightedLocation = -1;
+
         public World()
         {
             _noiseModule.Seed = 5;//new Random().Next();
@@ -309,10 +313,21 @@ namespace VoxelGame
 
         // --- Removed GenerateCubeVertices (moved to CubeData.cs) ---
 
-        // Modify Draw to accept a Texture
-        public void Draw(Shader shader, Camera camera, Texture texture)
+        // Cache shader uniform locations
+        private void CacheUniformLocations(Shader shader)
+        {
+            if (_highlightedBlockPosLocation == -1) // Cache only once
+            {
+                _highlightedBlockPosLocation = shader.GetUniformLocation("highlightedBlockPos");
+                _isBlockHighlightedLocation = shader.GetUniformLocation("isBlockHighlighted");
+            }
+        }
+
+        // Modify Draw to accept a Texture and targetedBlockPos
+        public void Draw(Shader shader, Camera camera, Texture texture, Vector3i? targetedBlockPos)
         {
             shader.Use();
+            CacheUniformLocations(shader); // Ensure locations are cached
 
             Matrix4 view = camera.GetViewMatrix();
             Matrix4 projection = camera.GetProjectionMatrix();
@@ -328,6 +343,19 @@ namespace VoxelGame
             shader.SetFloat("fogDensity", FogDensity);
             shader.SetFloat("fogGradient", FogGradient);
 
+            // Set Highlight Uniforms
+            if (targetedBlockPos.HasValue)
+            {
+                Vector3 targetPosFloat = new Vector3(targetedBlockPos.Value.X, targetedBlockPos.Value.Y, targetedBlockPos.Value.Z);
+                GL.Uniform3(_highlightedBlockPosLocation, targetPosFloat);
+                GL.Uniform1(_isBlockHighlightedLocation, 1); // Use 1 for true
+            }
+            else
+            {
+                GL.Uniform1(_isBlockHighlightedLocation, 0); // Use 0 for false
+                GL.Uniform3(_highlightedBlockPosLocation, Vector3.Zero);
+            }
+
             // --- Texture Setup ---
             texture.Use(TextureUnit.Texture0); // Activate texture unit 0 and bind the texture
             shader.SetInt("textureSampler", 0); // Tell the shader to use texture unit 0
@@ -338,11 +366,6 @@ namespace VoxelGame
             Vector2i playerChunkCoords = GetChunkCoords(camera.Position);
             int drawnChunkCount = 0;
 
-            // Iterate over the values (Chunks) of the ConcurrentDictionary
-            // This is generally safe, but the collection might change during iteration.
-            // Chunks added during iteration might or might not be drawn. Chunks removed might cause exceptions if not handled carefully.
-            // A safer approach might be to iterate over _activeChunks.ToArray() but that creates garbage.
-            // For rendering, iterating directly is often acceptable if occasional visual glitches are tolerable.
             foreach (var chunk in _activeChunks.Values)
             {
                 var coord = chunk.ChunkCoords; // Get coords from the chunk itself
@@ -355,13 +378,11 @@ namespace VoxelGame
                 {
                     if (chunk.IsReadyToDraw) // Only draw if buffers are ready
                     {
-                        // Frustum culling could be added here for optimization
                         chunk.Draw();
                         drawnChunkCount++;
                     }
                 }
             }
-            // Console.WriteLine($"Drew {drawnChunkCount} chunks.");
             CheckGLError("World.Draw DrawChunks");
         }
 

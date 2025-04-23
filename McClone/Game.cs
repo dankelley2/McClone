@@ -119,8 +119,11 @@ public class Game : GameWindow
         GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
         CheckGLError("RenderFrame Clear");
 
-        // Pass the texture to the world draw call
-        _world.Draw(_shader, _camera, _blockTexture);
+        // Get targeted block from player
+        Vector3i? targetedBlock = _player?.TargetedBlockPosition;
+
+        // Pass the texture and targeted block to the world draw call
+        _world.Draw(_shader, _camera, _blockTexture, targetedBlock);
         CheckGLError("RenderFrame World Draw");
 
         SwapBuffers();

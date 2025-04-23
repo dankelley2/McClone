@@ -1,6 +1,7 @@
 using OpenTK.Graphics.OpenGL4;
 using System.IO;
 using System;
+using OpenTK.Mathematics; // Ensure this is included
 
 namespace VoxelGame;
 
@@ -68,7 +69,7 @@ public class Shader : IDisposable
         return GL.GetAttribLocation(Handle, attribName);
     }
 
-     public int GetUniformLocation(string uniformName)
+    public int GetUniformLocation(string uniformName)
     {
         int location = GL.GetUniformLocation(Handle, uniformName);
         if (location == -1) // Uniform not found or unused (compiler optimized out)
@@ -78,7 +79,7 @@ public class Shader : IDisposable
         return location;
     }
 
-    public void SetMatrix4(string name, OpenTK.Mathematics.Matrix4 data)
+    public void SetMatrix4(string name, Matrix4 data) // Use fully qualified name
     {
          Use(); // Ensure program is active
          int location = GetUniformLocation(name);
@@ -87,7 +88,8 @@ public class Shader : IDisposable
               GL.UniformMatrix4(location, false, ref data); // Use false for ColumnMajor (OpenGL default)
          }
     }
-     public void SetVector3(string name, OpenTK.Mathematics.Vector3 data)
+
+    public void SetVector3(string name, Vector3 data) // Use fully qualified name
     {
         Use();
         int location = GetUniformLocation(name);
@@ -115,6 +117,12 @@ public class Shader : IDisposable
         {
             GL.Uniform1(location, data);
         }
+    }
+
+    // Add a specific method for bool uniforms (sent as int 0 or 1)
+    public void SetBool(string name, bool data)
+    {
+        SetInt(name, data ? 1 : 0);
     }
 
     protected virtual void Dispose(bool disposing)

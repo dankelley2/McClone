@@ -7,15 +7,17 @@ namespace VoxelGame
 {
     public class Player
     {
-        public Vector3 Position { get; set; }
+        public Vector3 Position { get; set; } // Represents the position of the player's feet
         public Vector3 Velocity { get; private set; } = Vector3.Zero;
         public Camera PlayerCamera { get; private set; }
+        public Vector3i? TargetedBlockPosition { get; private set; } // Store the position of the block being looked at
 
         // Player Physics Properties
         private const float Gravity = 25.0f;
         private const float JumpForce = 9.0f;
         private const float PlayerSpeed = 5.0f;
-        public Vector3 Size { get; } = new Vector3(0.6f, 1.8f, 0.6f); // Width, Height, Depth
+        public Vector3 Size { get; } = new Vector3(0.6f, 1f, 0.6f); // Width, Height, Depth
+        public float EyeHeight => Size.Y * 0.9f; // Eye level relative to feet position (e.g., 90% of height)
 
         private bool _isOnGround = false;
         private bool _canJump = false;
@@ -29,38 +31,22 @@ namespace VoxelGame
 
         public Player(Vector3 startPosition, float aspectRatio, CollisionManager collisionManager, World world)
         {
-            Position = startPosition;
-            PlayerCamera = new Camera(startPosition, aspectRatio);
+            Position = startPosition; // startPosition should be feet position
+            // Initialize camera at the correct eye level
+            PlayerCamera = new Camera(startPosition + Vector3.UnitY * EyeHeight, aspectRatio);
             _collisionManager = collisionManager;
             _world = world;
         }
 
         public void Update(float dt, KeyboardState input, MouseState mouse, bool isFirstMove, Vector2 lastMousePos)
         {
-            // Update cooldown timer
-            if (_blockBreakCooldown > 0)
-            {
-                _blockBreakCooldown -= dt;
-            }
+            // --- Physics and Collision ---
+            // (Perform physics calculations to update player's base Position first)
+            Vector3 currentPosition = Position;
+            Vector3 currentVelocity = Velocity;
 
-            // --- Mouse Look ---
-            if (!isFirstMove)
-            {
-                var deltaX = mouse.X - lastMousePos.X;
-                var deltaY = mouse.Y - lastMousePos.Y;
-                PlayerCamera.ProcessMouseMovement(deltaX, deltaY);
-            }
-
-            // --- Block Breaking Input ---
-            if (mouse.IsButtonDown(MouseButton.Left) && _blockBreakCooldown <= 0) // Left click to break
-            {
-                if (_world.Raycast(PlayerCamera.Position, PlayerCamera.Front, 5.0f, out Vector3 hitBlockPos, out _)) // 5.0f is reach distance
-                {
-                    Vector3i blockToRemove = new Vector3i((int)Math.Floor(hitBlockPos.X), (int)Math.Floor(hitBlockPos.Y), (int)Math.Floor(hitBlockPos.Z));
-                    _world.RemoveBlockAt(blockToRemove);
-                    _blockBreakCooldown = BlockBreakInterval; // Reset cooldown
-                }
-            }
+            // Apply Gravity
+            currentVelocity.Y -= Gravity * dt;
 
             // --- Player Movement Input ---
             Vector3 moveDir = Vector3.Zero;
@@ -73,13 +59,6 @@ namespace VoxelGame
             _ctrlPressed = input.IsKeyDown(Keys.LeftControl);
             moveDir.Y = 0; // Prevent flying
             if (moveDir.LengthSquared > 0) moveDir.Normalize();
-
-            // --- Physics and Collision ---
-            Vector3 currentPosition = Position;
-            Vector3 currentVelocity = Velocity;
-
-            // Apply Gravity
-            currentVelocity.Y -= Gravity * dt;
 
             // Calculate intended displacement
             Vector3 horizontalDisplacement = _shiftPressed ? moveDir * (PlayerSpeed * 2) * dt : moveDir * PlayerSpeed * dt;
@@ -153,12 +132,49 @@ namespace VoxelGame
                 _canJump = false;
             }
 
-            // Final Update
+            // Final Update of player's base position happens here
             Position = currentPosition;
             Velocity = currentVelocity;
 
-            // Update Camera position to match player
-            PlayerCamera.Position = Position;
+            // --- Update Camera Position based on new Player Position ---
+            // Calculate the correct eye position *before* raycasting and mouse look
+            Vector3 currentEyePosition = Position + Vector3.UnitY * EyeHeight;
+            PlayerCamera.Position = currentEyePosition; // Update camera's internal position
+
+            // Update cooldown timer
+            if (_blockBreakCooldown > 0)
+            {
+                _blockBreakCooldown -= dt;
+            }
+
+            // --- Mouse Look ---
+            // Process mouse look using the updated camera state
+            if (!isFirstMove) // Removed CursorState check, assuming it's handled elsewhere or always grabbed
+            {
+                var deltaX = mouse.X - lastMousePos.X;
+                var deltaY = mouse.Y - lastMousePos.Y;
+                PlayerCamera.ProcessMouseMovement(deltaX, deltaY);
+            }
+
+            // --- Block Targeting Raycast (for highlighting) ---
+            // Use the *updated* camera position and direction for the raycast
+            if (_world.Raycast(PlayerCamera.Position, PlayerCamera.Front, 5.0f, out Vector3 hitBlockPos, out _)) // 5.0f is reach distance
+            {
+                // Store the integer coords of the hit block for highlighting
+                TargetedBlockPosition = new Vector3i((int)Math.Floor(hitBlockPos.X), (int)Math.Floor(hitBlockPos.Y), (int)Math.Floor(hitBlockPos.Z));
+
+                // --- Block Breaking Input (only if targeting a block) ---
+                if (mouse.IsButtonDown(MouseButton.Left) && _blockBreakCooldown <= 0) // Left click to break
+                {
+                    _world.RemoveBlockAt(TargetedBlockPosition.Value); // Use the stored value
+                    _blockBreakCooldown = BlockBreakInterval; // Reset cooldown
+                    TargetedBlockPosition = null; // Clear target immediately after breaking to avoid re-highlighting instantly
+                }
+            }
+            else
+            {
+                TargetedBlockPosition = null; // No block hit by raycast, clear highlight target
+            }
         }
 
         public void UpdateAspectRatio(float aspectRatio)
