@@ -158,7 +158,8 @@ namespace VoxelGame
         public void ProcessBuildQueue()
         {
             int builtThisFrame = 0;
-            int maxBuildPerFrame = 4; // Limit builds per frame to avoid stutter
+            // Reduce max builds per frame to lessen potential main thread spikes
+            int maxBuildPerFrame = 2; // Lowered from 4
 
             while (builtThisFrame < maxBuildPerFrame && _buildQueue.TryDequeue(out var chunkToBuild))
             {
@@ -186,7 +187,6 @@ namespace VoxelGame
 
             // --- Identify Chunks to Load/Unload ---
             HashSet<(int, int)> requiredChunks = new HashSet<(int, int)>();
-            List<(int, int)> chunksToUnload = new List<(int, int)>();
 
             for (int x = playerChunkCoords.X - LoadDistance; x <= playerChunkCoords.X + LoadDistance; x++)
             {
@@ -196,26 +196,20 @@ namespace VoxelGame
                 }
             }
 
-            // Find chunks currently active but no longer required
-            // Iterate over a snapshot of keys to avoid issues with concurrent modification during unload
-            foreach (var loadedCoord in _activeChunks.Keys.ToList())
+            // --- Unload Far Chunks ---
+            // Iterate directly over the dictionary to avoid ToList() allocation.
+            // ConcurrentDictionary allows safe iteration while modifying.
+            foreach (var kvp in _activeChunks)
             {
+                var loadedCoord = kvp.Key;
                 if (!requiredChunks.Contains(loadedCoord))
                 {
-                    chunksToUnload.Add(loadedCoord);
-                }
-            }
-
-            // --- Unload Far Chunks ---
-            foreach (var coord in chunksToUnload)
-            {
-                if (_activeChunks.TryRemove(coord, out var chunk)) // Thread-safe removal
-                {
-                    // Console.WriteLine($"Unloading chunk {coord}");
-                    chunk.Dispose(); // Dispose buffers (must happen on main thread)
-                    // Note: We don't explicitly cancel generation here. If it's generating,
-                    // it will finish, try to enqueue for build, but the build step will skip it.
-                    // A more complex cancellation could be added if needed.
+                    // TryRemove is thread-safe.
+                    if (_activeChunks.TryRemove(loadedCoord, out var chunk))
+                    {
+                        // Console.WriteLine($"Unloading chunk {loadedCoord}");
+                        chunk.Dispose(); // Dispose buffers (must happen on main thread)
+                    }
                 }
             }
 
