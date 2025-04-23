@@ -116,7 +116,8 @@ namespace VoxelGame
             }
 
             // Handle Jump Input
-            if (input.IsKeyPressed(Keys.Space) && _isOnGround)
+            // Change IsKeyPressed to IsKeyDown to allow holding space to jump repeatedly
+            if (input.IsKeyDown(Keys.Space) && _isOnGround) // Check if space is HELD and player is on ground
             {
                 currentVelocity.Y = JumpForce;
                 _isOnGround = false;

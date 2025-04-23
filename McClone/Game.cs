@@ -54,7 +54,8 @@ public class Game : GameWindow
 
         GL.ClearColor(0.5f, 0.75f, 0.9f, 1.0f);
         GL.Enable(EnableCap.DepthTest);
-        CheckGLError("After DepthTest Enable");
+        GL.Enable(EnableCap.Multisample); // Enable Anti-Aliasing
+        CheckGLError("After DepthTest/Multisample Enable");
 
         // Setup Shader
         _shader = new Shader("Shaders/shader.vert", "Shaders/shader.frag");

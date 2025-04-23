@@ -17,6 +17,10 @@ public static class Program
             return;
         }
 
+        // Request multisampling for Anti-Aliasing (e.g., 4 samples)
+        GLFW.WindowHint(WindowHintInt.Samples, 4);
+        Console.WriteLine("==> Requested 4x MSAA");
+
         // Keep the hint you found worked best or the recommended one
         //GLFW.WindowHint(WindowHintBool.ScaleFramebuffer, true); // Or CocoaRetinaFramebuffer if you switched back
         // Console.WriteLine("==> Set WindowHintBool.ScaleFramebuffer hint to TRUE");
