@@ -189,9 +189,6 @@ namespace VoxelGame
                     vertexData.Add(cubeVertices[faceStart + j + 5]);
                     vertexData.Add(cubeVertices[faceStart + j + 6]);
                     vertexData.Add(cubeVertices[faceStart + j + 7]);
-                    vertexData.Add(cubeVertices[faceStart + j + 8]);
-                    vertexData.Add(cubeVertices[faceStart + j + 9]);
-                    vertexData.Add(cubeVertices[faceStart + j + 10]);
                 }
             }
         }
@@ -288,15 +285,22 @@ namespace VoxelGame
             GL.BindBuffer(BufferTarget.ArrayBuffer, _vbo);
             GL.BufferData(BufferTarget.ArrayBuffer, vertexData.Count * sizeof(float), vertexData.ToArray(), BufferUsageHint.StaticDraw);
 
-            int strideBytes = CubeData.VertexStride * sizeof(float);
+            int strideBytes = CubeData.VertexStride * sizeof(float); // Now 8 * 4 = 32 bytes
+
+            // Position attribute (location = 0)
             GL.EnableVertexAttribArray(0);
+            // 3 floats, starting at offset 0
             GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, strideBytes, 0);
+
+            // Normal attribute (location = 1)
             GL.EnableVertexAttribArray(1);
-            GL.VertexAttribPointer(1, 3, VertexAttribPointerType.Float, false, strideBytes, 3 * sizeof(float));
+            // 3 floats, starting after Position (3 floats), so offset is 3 * sizeof(float)
+            GL.VertexAttribPointer(1, 3, VertexAttribPointerType.Float, false, strideBytes, 3 * sizeof(float)); // Corrected offset
+
+            // TexCoord attribute (location = 2)
             GL.EnableVertexAttribArray(2);
-            GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, strideBytes, 6 * sizeof(float));
-            GL.EnableVertexAttribArray(3);
-            GL.VertexAttribPointer(3, 2, VertexAttribPointerType.Float, false, strideBytes, 9 * sizeof(float));
+            // 2 floats, starting after Position (3) and Normal (3), so offset is 6 * sizeof(float)
+            GL.VertexAttribPointer(2, 2, VertexAttribPointerType.Float, false, strideBytes, 6 * sizeof(float)); // Corrected offset
 
             GL.BindBuffer(BufferTarget.ArrayBuffer, 0);
             GL.BindVertexArray(0);
