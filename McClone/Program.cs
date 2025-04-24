@@ -35,7 +35,7 @@ public static class Program
             Flags = ContextFlags.ForwardCompatible,
 
             // Set the window state to Fullscreen
-            WindowState = WindowState.Normal,
+            WindowState = WindowState.Fullscreen,
 
             // Optional: Specify the primary monitor explicitly
             // CurrentMonitor = Monitors.GetPrimaryMonitor().Handle // Requires reference to Monitors class

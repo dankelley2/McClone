@@ -119,19 +119,8 @@ public class Game : GameWindow
         GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
         CheckGLError("RenderFrame Clear");
 
-        // Get targeted block from player
-        Vector3i? targetedBlock = _player?.TargetedBlockPosition;
-
-        // Pass the texture and targeted block to the world draw call
-        _world.Draw(_shader, _camera, _blockTexture, targetedBlock);
+        _world.Draw(_shader, _camera, _blockTexture);
         CheckGLError("RenderFrame World Draw");
-
-        // --- Wireframe Highlight Pass ---
-        if (targetedBlock.HasValue)
-        {
-            _world.DrawBlockWireframe(_shader, _camera, targetedBlock.Value);
-            CheckGLError("RenderFrame Wireframe Highlight");
-        }
 
         SwapBuffers();
         CheckGLError("RenderFrame SwapBuffers");

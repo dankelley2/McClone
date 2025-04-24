@@ -13,10 +13,6 @@ uniform vec3 fogColor;
 uniform float fogDensity;
 uniform float fogGradient;
 
-// Highlight Uniforms
-uniform int isBlockHighlighted; // Use int (0 or 1) for bool
-uniform vec3 highlightedBlockPos; // Integer coords of the highlighted block (e.g., 5.0, 10.0, 3.0)
-
 void main()
 {
     // --- Lighting Parameters ---
@@ -47,29 +43,6 @@ void main()
     // --- Base Color Calculation ---
     vec3 lighting = (ambient + diffuse) * edgeDarkening;
     vec3 baseColor = lighting * texColor.rgb; // Modulate texture color by light
-
-    // --- Highlight Calculation ---
-    if (isBlockHighlighted == 1)
-    {
-        // Check if the fragment's block coordinate matches the highlighted block coordinate
-        // floor(FragPos) gives the integer coordinate of the block this fragment belongs to.
-        // This works because FragPos for a block at (5,10,3) will be between (4.5, 9.5, 2.5) and (5.5, 10.5, 3.5)
-        vec3 fragBlockCoord = floor(FragPos);
-        bool isFragInHighlightBlock = fragBlockCoord == highlightedBlockPos;
-
-        if (isFragInHighlightBlock)
-        {
-            // Apply highlight effect - e.g., add white tint
-            //baseColor = mix(baseColor, vec3(1.0, 1.0, 1.0), 0.25); // Mix 25% white
-
-            // --- Alternative: Edge Highlighting (using distance from center) ---
-            vec3 blockCenter = highlightedBlockPos + vec3(0.5);
-            vec3 distToCenter = abs(FragPos - blockCenter);
-            float maxDist = max(distToCenter.x, max(distToCenter.y, distToCenter.z));
-            float edgeFactor = smoothstep(0.45, 0.5, maxDist); // Highlight near the 0.5 boundary
-            baseColor = mix(baseColor, vec3(1.0, 1.0, 1.0), edgeFactor * 0.5); // Mix white at edges
-        }
-    }
 
     // --- Fog Calculation ---
     float dist = length(viewPos - FragPos);

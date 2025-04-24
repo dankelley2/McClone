@@ -39,30 +39,6 @@ namespace VoxelGame
         public float FogDensity { get; set; } = 0.015f; // Exponential fog density
         public float FogGradient { get; set; } = 2.5f; // Controls how quickly fog thickens
 
-        // Shader Uniform Location Caching
-        private int _highlightedBlockPosLocation = -1;
-        private int _isBlockHighlightedLocation = -1;
-
-        private static int _wireframeVao = 0;
-        private static int _wireframeVbo = 0;
-        private static bool _wireframeInitialized = false;
-
-        private static void InitWireframeCube()
-        {
-            if (_wireframeInitialized) return;
-            _wireframeVao = GL.GenVertexArray();
-            _wireframeVbo = GL.GenBuffer();
-            GL.BindVertexArray(_wireframeVao);
-            GL.BindBuffer(BufferTarget.ArrayBuffer, _wireframeVbo);
-            GL.BufferData(BufferTarget.ArrayBuffer, CubeData.Vertices.Length * sizeof(float), CubeData.Vertices, BufferUsageHint.StaticDraw);
-            int strideBytes = CubeData.VertexStride * sizeof(float);
-            GL.EnableVertexAttribArray(0);
-            GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, strideBytes, 0);
-            GL.BindBuffer(BufferTarget.ArrayBuffer, 0);
-            GL.BindVertexArray(0);
-            _wireframeInitialized = true;
-        }
-
         public World()
         {
             _noiseModule.Seed = 5;//new Random().Next();
@@ -336,18 +312,14 @@ namespace VoxelGame
         // Cache shader uniform locations
         private void CacheUniformLocations(Shader shader)
         {
-            if (_highlightedBlockPosLocation == -1) // Cache only once
-            {
-                _highlightedBlockPosLocation = shader.GetUniformLocation("highlightedBlockPos");
-                _isBlockHighlightedLocation = shader.GetUniformLocation("isBlockHighlighted");
-            }
+            // Ensure caching is only attempted once or make idempotent if called multiple times
         }
 
-        // Modify Draw to accept a Texture and targetedBlockPos
-        public void Draw(Shader shader, Camera camera, Texture texture, Vector3i? targetedBlockPos)
+        // Modify Draw to accept a Texture
+        public void Draw(Shader shader, Camera camera, Texture texture)
         {
             shader.Use();
-            CacheUniformLocations(shader); // Ensure locations are cached
+            CacheUniformLocations(shader); // Ensure locations are cached (if any remain)
 
             Matrix4 view = camera.GetViewMatrix();
             Matrix4 projection = camera.GetProjectionMatrix();
@@ -362,19 +334,6 @@ namespace VoxelGame
             shader.SetVector3("fogColor", FogColor);
             shader.SetFloat("fogDensity", FogDensity);
             shader.SetFloat("fogGradient", FogGradient);
-
-            // Set Highlight Uniforms
-            if (targetedBlockPos.HasValue)
-            {
-                Vector3 targetPosFloat = new Vector3(targetedBlockPos.Value.X, targetedBlockPos.Value.Y, targetedBlockPos.Value.Z);
-                GL.Uniform3(_highlightedBlockPosLocation, targetPosFloat);
-                GL.Uniform1(_isBlockHighlightedLocation, 1); // Use 1 for true
-            }
-            else
-            {
-                GL.Uniform1(_isBlockHighlightedLocation, 0); // Use 0 for false
-                GL.Uniform3(_highlightedBlockPosLocation, Vector3.Zero);
-            }
 
             // --- Texture Setup ---
             texture.Use(TextureUnit.Texture0); // Activate texture unit 0 and bind the texture
@@ -404,45 +363,6 @@ namespace VoxelGame
                 }
             }
             CheckGLError("World.Draw DrawChunks");
-        }
-
-        // Draw a wireframe cube at the targeted block position
-        public void DrawBlockWireframe(Shader shader, Camera camera, Vector3i blockPos)
-        {
-            InitWireframeCube();
-            // Set polygon mode to line (wireframe)
-            GL.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Line);
-            GL.Disable(EnableCap.CullFace);
-            GL.DepthMask(false); // Prevent writing to depth buffer
-            GL.Enable(EnableCap.PolygonOffsetLine);
-            GL.PolygonOffset(-1.0f, -1.0f); // Pull wireframe forward
-            GL.LineWidth(2.5f);
-
-            // Use a simple model matrix to scale up the wireframe slightly
-            Matrix4 model = Matrix4.CreateScale(1.05f) * Matrix4.CreateTranslation(blockPos.X + 0.5f, blockPos.Y + 0.5f, blockPos.Z + 0.5f);
-            shader.Use();
-            shader.SetMatrix4("model", model);
-            shader.SetMatrix4("view", camera.GetViewMatrix());
-            shader.SetMatrix4("projection", camera.GetProjectionMatrix());
-            shader.SetVector3("viewPos", camera.Position);
-            shader.SetVector3("fogColor", FogColor);
-            shader.SetFloat("fogDensity", FogDensity);
-            shader.SetFloat("fogGradient", FogGradient);
-            // Disable highlight uniforms
-            GL.Uniform1(_isBlockHighlightedLocation, 0);
-            GL.Uniform3(_highlightedBlockPosLocation, Vector3.Zero);
-            // Set wireframe color via a uniform (add 'wireframeColor' to your shader)
-            shader.SetVector3("wireframeColor", new Vector3(1.0f, 1.0f, 0.2f));
-
-            GL.BindVertexArray(_wireframeVao);
-            GL.DrawArrays(PrimitiveType.Triangles, 0, CubeData.Vertices.Length / CubeData.VertexStride);
-            GL.BindVertexArray(0);
-
-            // Restore state
-            GL.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Fill);
-            GL.DepthMask(true);
-            GL.Enable(EnableCap.CullFace);
-            GL.Disable(EnableCap.PolygonOffsetLine);
         }
 
         public void Dispose()
