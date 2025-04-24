@@ -15,12 +15,14 @@ namespace VoxelGame.Player
         private const float Gravity = -19.81f; // Adjusted gravity
         private const float MoveSpeed = 5.0f;
         private const float JumpForce = 8.0f;
-        private const float MouseSensitivity = 0.002f;
+        public Vector3i? TargetedBlockPosition { get; private set; } // Store the position of the block being looked at
 
         private Vector3 _velocity;
         private bool _isGrounded;
         private CollisionManager _collisionManager;
         private World.World _world;
+        private float _blockBreakCooldown = 0.0f; // Cooldown timer
+        private const float BlockBreakInterval = 0.1f; // Time between block breaks
 
         public Player(Vector3 startPosition, float aspectRatio, CollisionManager collisionManager, World.World world)
         {
@@ -48,11 +50,12 @@ namespace VoxelGame.Player
             if (input.IsKeyDown(Keys.S)) moveDir -= PlayerCamera.Front;
             if (input.IsKeyDown(Keys.A)) moveDir -= PlayerCamera.Right;
             if (input.IsKeyDown(Keys.D)) moveDir += PlayerCamera.Right;
+            var shiftPressed = input.IsKeyDown(Keys.LeftShift);
             moveDir.Y = 0; // Prevent flying
             if (moveDir.LengthSquared > 0) moveDir.Normalize();
 
             // Calculate intended displacement
-            Vector3 horizontalDisplacement = moveDir * MoveSpeed * dt;
+            Vector3 horizontalDisplacement = shiftPressed ? moveDir * (MoveSpeed * 4) * dt : moveDir * MoveSpeed * dt;
             Vector3 verticalDisplacement = new Vector3(0, currentVelocity.Y * dt, 0);
 
             // --- Collision Detection and Response ---
@@ -109,7 +112,7 @@ namespace VoxelGame.Player
             // Jump logic
             if (input.IsKeyDown(Keys.Space) && _isGrounded)
             {
-                _velocity.Y = JumpForce;
+                currentVelocity.Y = shiftPressed ? JumpForce * 4 : JumpForce;
                 _isGrounded = false;
             }
 
@@ -122,6 +125,7 @@ namespace VoxelGame.Player
             Vector3 currentEyePosition = Position + Vector3.UnitY * Size.Y * 0.9f;
             PlayerCamera.Position = currentEyePosition; // Update camera's internal position
 
+
             // --- Mouse Look ---
             // Process mouse look using the updated camera state
             if (!firstMove) // Removed CursorState check, assuming it's handled elsewhere or always grabbed
@@ -129,6 +133,32 @@ namespace VoxelGame.Player
                 var deltaX = mouse.X - lastMousePos.X;
                 var deltaY = mouse.Y - lastMousePos.Y;
                 PlayerCamera.ProcessMouseMovement(deltaX, deltaY);
+            }
+
+            // Update cooldown timer
+            if (_blockBreakCooldown > 0)
+            {
+                _blockBreakCooldown -= dt;
+            }
+
+            // --- Block Targeting Raycast (for highlighting) ---
+            // Use the *updated* camera position and direction for the raycast
+            if (_world.Raycast(PlayerCamera.Position, PlayerCamera.Front, 100.0f, out Vector3 hitBlockPos, out _)) // 100.0f is reach distance
+            {
+                // Store the integer coords of the hit block for highlighting
+                TargetedBlockPosition = new Vector3i((int)Math.Floor(hitBlockPos.X), (int)Math.Floor(hitBlockPos.Y), (int)Math.Floor(hitBlockPos.Z));
+
+                // --- Block Breaking Input (only if targeting a block) ---
+                if (mouse.IsButtonDown(MouseButton.Left) && _blockBreakCooldown <= 0) // Left click to break
+                {
+                    _world.RemoveBlockAt(TargetedBlockPosition.Value); // Use the stored value
+                    _blockBreakCooldown = BlockBreakInterval; // Reset cooldown
+                    TargetedBlockPosition = null; // Clear target immediately after breaking to avoid re-highlighting instantly
+                }
+            }
+            else
+            {
+                TargetedBlockPosition = null; // No block hit by raycast, clear highlight target
             }
         }
 
