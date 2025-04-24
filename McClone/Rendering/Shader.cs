@@ -3,7 +3,8 @@ using System.IO;
 using System;
 using OpenTK.Mathematics; // Ensure this is included
 
-namespace VoxelGame;
+namespace VoxelGame.Rendering
+{
 
 public class Shader : IDisposable
 {
@@ -144,4 +145,5 @@ public class Shader : IDisposable
         Dispose(true);
         GC.SuppressFinalize(this);
     }
+}
 }

@@ -3,7 +3,7 @@ using StbImageSharp;
 using System;
 using System.IO;
 
-namespace VoxelGame
+namespace VoxelGame.Rendering
 {
     public class Texture : IDisposable
     {

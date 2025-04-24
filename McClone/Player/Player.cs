@@ -2,8 +2,10 @@ using OpenTK.Mathematics;
 using OpenTK.Windowing.GraphicsLibraryFramework;
 using System;
 using System.Collections.Generic; // Required for List<Vector3>
+using VoxelGame.Rendering;
+using VoxelGame.World;
 
-namespace VoxelGame
+namespace VoxelGame.Player
 {
     public class Player
     {
@@ -23,13 +25,13 @@ namespace VoxelGame
         private bool _canJump = false;
 
         private CollisionManager _collisionManager;
-        private World _world; // Reference to the world for collision data
+        private World.World _world; // Reference to the world for collision data
         private bool _shiftPressed = false;
         private bool _ctrlPressed;
         private float _blockBreakCooldown = 0.0f; // Cooldown timer
         private const float BlockBreakInterval = 0.2f; // Time between block breaks
 
-        public Player(Vector3 startPosition, float aspectRatio, CollisionManager collisionManager, World world)
+        public Player(Vector3 startPosition, float aspectRatio, CollisionManager collisionManager, World.World world)
         {
             Position = startPosition; // startPosition should be feet position
             // Initialize camera at the correct eye level

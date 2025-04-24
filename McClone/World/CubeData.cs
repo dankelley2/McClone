@@ -1,7 +1,7 @@
 using OpenTK.Graphics.OpenGL4; // Required for CheckGLError if kept here
 using System;
 
-namespace VoxelGame
+namespace VoxelGame.World
 {
     public static class CubeData
     {

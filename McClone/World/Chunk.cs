@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace VoxelGame
+namespace VoxelGame.World
 {
     // Moved from World.cs
     public class Chunk : IDisposable

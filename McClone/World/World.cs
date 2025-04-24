@@ -7,8 +7,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;      // For CancellationTokenSource and Thread
 using System.Threading.Tasks; // For Task
+using VoxelGame.Rendering;
 
-namespace VoxelGame
+namespace VoxelGame.World
 {
     public class World : IDisposable
     {
