@@ -86,10 +86,11 @@ namespace VoxelGame.World
                 {
                     for (int z = 0; z < ChunkSize; z++)
                     {
+                        // Access constants via _parentWorld._worldGen
                         double noiseValue = _parentWorld.GetNoiseValue(WorldOffset.X + x, WorldOffset.Z + z);
-                        byte height = (byte)Math.Max(byte.MinValue, Math.Min(byte.MaxValue, World.BaseHeight + Math.Round((noiseValue + 1.0) / 2.0 * World.TerrainAmplitude)));
-                        
-                        for (byte y = World.BaseHeight - 1; y <= height && y < ChunkHeight; y++){
+                        byte height = (byte)Math.Max(byte.MinValue, Math.Min(byte.MaxValue, WorldGeneration.BaseHeight + Math.Round((noiseValue + 1.0) / 2.0 * WorldGeneration.TerrainAmplitude)));
+
+                        for (byte y = (byte)(WorldGeneration.BaseHeight - 1); y <= height && y < ChunkHeight; y++){
                             byte[,]? currentLayer = _layers[y]; // Assign to nullable local var
                             if (currentLayer == null)
                             {

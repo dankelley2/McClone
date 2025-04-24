@@ -1,28 +1,19 @@
+// World.cs: Manages the overall game world, including chunk management, world generation, and rendering
+
 using OpenTK.Graphics.OpenGL4;
 using OpenTK.Mathematics;
-using SharpNoise.Modules;
-using System;
-using System.Collections.Concurrent; // For concurrent collections
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;      // For CancellationTokenSource and Thread
-using System.Threading.Tasks; // For Task
+using System.Collections.Concurrent; // Add for concurrent collections
+using System.Threading;             // Add for CancellationTokenSource
+using System.Threading.Tasks;        // Add for Task
 using VoxelGame.Rendering;
+using VoxelGame.World;
 
 namespace VoxelGame.World
 {
     public class World : IDisposable
     {
-        // --- Removed Nested Chunk Class ---
-
-        // --- Removed Voxel/Cube Data (moved to CubeData.cs) ---
-
-        // World Generation Parameters
-        private Perlin _noiseModule = new();
-        public const float NoiseScale = 0.03f;
-        public const int NoiseOctaves = 6;
-        public const float TerrainAmplitude = 15f; // Increased amplitude
-        public const int BaseHeight = 50; // Base ground level
+        private readonly WorldGeneration _worldGen = new();
+        private readonly FogSettings _fogSettings = new();
 
         // Chunk Management
         private ConcurrentDictionary<(int, int), Chunk> _activeChunks = new(); // Thread-safe dictionary
@@ -35,24 +26,16 @@ namespace VoxelGame.World
         private CancellationTokenSource _cancellationSource = new();
         private Task _generationTask = null!;
 
-        // Fog Parameters
-        public Vector3 FogColor { get; set; } = new Vector3(0.5f, 0.75f, 0.9f); // Match clear color
-        public float FogDensity { get; set; } = 0.015f; // Exponential fog density
-        public float FogGradient { get; set; } = 2.5f; // Controls how quickly fog thickens
-
         public World()
         {
-            _noiseModule.Seed = 5;//new Random().Next();
-            _noiseModule.OctaveCount = NoiseOctaves;
-            _noiseModule.Persistence = 0.5; // Default persistence
-            _noiseModule.Lacunarity = 2.0; // Default lacunarity
+            // Remove _worldGen.SetSeed(5); - Seed is handled in WorldGeneration constructor
         }
 
         public void Initialize()
         {
             Console.WriteLine("Initializing World...");
             CubeData.GenerateVertices(); // Generate the template cube vertices once using static class
-            CheckGLError("World.Initialize CubeData");
+            WorldUtils.CheckGLError("World.Initialize CubeData");
 
             // Start the background generation task
             _generationTask = Task.Run(() => ProcessGenerationQueue(_cancellationSource.Token), _cancellationSource.Token);
@@ -82,7 +65,6 @@ namespace VoxelGame.World
                     if (_activeChunks.TryAdd(coord, newChunk))
                     {
                         _generationQueue.Add(coord); // Add to background queue
-                        // Console.WriteLine($"Queued initial chunk {coord} for generation");
                     }
                 }
             }
@@ -99,7 +81,6 @@ namespace VoxelGame.World
                 {
                     if (!_activeChunks.TryGetValue((x, z), out var chunk) || !chunk.IsReadyToDraw)
                     {
-                        // Console.WriteLine($"Waiting for chunk ({x},{z})..."); // Debugging
                         return false; // Not ready yet
                     }
                 }
@@ -124,25 +105,21 @@ namespace VoxelGame.World
                         bool needsInitialTerrain = !chunk._isInitialized;
                         if (needsInitialTerrain)
                         {
-                            // Console.WriteLine($"Generating terrain for chunk {coord}...");
                             chunk.GenerateTerrain(); // Generates terrain, sets _isInitialized=true, _isDirty=true
                         }
 
                         // If initialized (or just became initialized) and is marked dirty, generate mesh data
                         if (chunk._isInitialized && chunk.IsDirty) // Check IsDirty flag
                         {
-                            // Console.WriteLine($"Generating vertex data for chunk {coord} (Initial: {needsInitialTerrain})...");
                             List<float> vertexData = chunk.GenerateVertexData(); // CPU-bound mesh generation
                             chunk.PendingVertexData = vertexData; // Store data for main thread
                             _buildQueue.Enqueue(chunk); // Add to the main thread queue for GL update
-                            // Console.WriteLine($"Chunk {coord} vertex data generated, queued for GL build.");
                         }
                         // Note: _isDirty is set to false only after GL update on main thread
                     }
                     else
                     {
                         // Chunk might have been unloaded before generation started
-                        // Console.WriteLine($"Chunk {coord} not found in active chunks during generation.");
                     }
                 }
             }
@@ -172,15 +149,12 @@ namespace VoxelGame.World
                  // Check if chunk still exists and has pending data
                  if (_activeChunks.ContainsKey((chunkToUpdate.ChunkCoords.X, chunkToUpdate.ChunkCoords.Y)) && chunkToUpdate.PendingVertexData != null)
                  {
-                    // Console.WriteLine($"Updating GL buffers for chunk {chunkToUpdate.ChunkCoords}...");
                     chunkToUpdate.UpdateGLBuffers(chunkToUpdate.PendingVertexData); // Upload data to GPU
                     chunkToUpdate.PendingVertexData = null; // Clear pending data
                     // UpdateGLBuffers sets _isDirty = false internally
                     updatedThisFrame++;
                  }
-                 // else Console.WriteLine($"Skipping GL update for chunk {chunkToUpdate.ChunkCoords} (no pending data or removed).");
             }
-            // if (updatedThisFrame > 0) Console.WriteLine($"Updated GL buffers for {updatedThisFrame} chunks this frame.");
         }
 
 
@@ -214,7 +188,6 @@ namespace VoxelGame.World
                     // TryRemove is thread-safe.
                     if (_activeChunks.TryRemove(loadedCoord, out var chunk))
                     {
-                        // Console.WriteLine($"Unloading chunk {loadedCoord}");
                         chunk.Dispose(); // Dispose buffers (must happen on main thread)
                     }
                 }
@@ -231,7 +204,6 @@ namespace VoxelGame.World
                     {
                         // Add to background queue for terrain generation AND initial mesh data generation
                         _generationQueue.Add(coord);
-                        // Console.WriteLine($"Queued new chunk {coord} for generation");
                     }
                     // If TryAdd fails, another thread likely added it just before, which is fine.
                 }
@@ -282,30 +254,31 @@ namespace VoxelGame.World
             return nearbyVoxels;
         }
 
+        // Expose fog properties via FogSettings
+        public Vector3 FogColor { get => _fogSettings.FogColor; set => _fogSettings.FogColor = value; }
+        public float FogDensity { get => _fogSettings.FogDensity; set => _fogSettings.FogDensity = value; }
+        public float FogGradient { get => _fogSettings.FogGradient; set => _fogSettings.FogGradient = value; }
+
+
         // Thread-safe way to get height from cache
         public int GetHeight(int worldX, int worldZ)
         {
-            // Fallback: Calculate on the fly using noise
-            double noiseValue = GetNoiseValue(worldX, worldZ); // Use helper
-            byte calculatedHeight = (byte)Math.Max(byte.MinValue, Math.Min(byte.MaxValue, BaseHeight + Math.Round((noiseValue + 1.0) / 2.0 * TerrainAmplitude)));
-            // Optionally cache this calculated value? Be careful about cache size.
-            // _terrainHeightMap.TryAdd((worldX, worldZ), calculatedHeight); // Use TryAdd for thread safety
+            // Use WorldGeneration for noise and height
+            double noiseValue = _worldGen.GetNoiseValue(worldX, worldZ);
+            byte calculatedHeight = (byte)Math.Max(byte.MinValue, Math.Min(byte.MaxValue, WorldGeneration.BaseHeight + Math.Round((noiseValue + 1.0) / 2.0 * WorldGeneration.TerrainAmplitude)));
             return calculatedHeight;
         }
 
         // Helper for noise calculation (potentially accessed by multiple threads)
         internal double GetNoiseValue(int worldX, int worldZ)
         {
-             // SharpNoise Perlin is generally considered thread-safe for reads if Seed/OctaveCount etc. aren't changed after initialization.
-             return _noiseModule.GetValue(worldX * NoiseScale, 0, worldZ * NoiseScale);
+            return _worldGen.GetNoiseValue(worldX, worldZ);
         }
 
 
         private Vector2i GetChunkCoords(Vector3 worldPosition)
         {
-            int chunkX = (int)Math.Floor(worldPosition.X / Chunk.ChunkSize);
-            int chunkZ = (int)Math.Floor(worldPosition.Z / Chunk.ChunkSize);
-            return new Vector2i(chunkX, chunkZ);
+            return WorldUtils.GetChunkCoords(worldPosition, Chunk.ChunkSize);
         }
 
         // --- Removed GenerateCubeVertices (moved to CubeData.cs) ---
@@ -340,7 +313,7 @@ namespace VoxelGame.World
             texture.Use(TextureUnit.Texture0); // Activate texture unit 0 and bind the texture
             shader.SetInt("textureSampler", 0); // Tell the shader to use texture unit 0
 
-            CheckGLError("World.Draw SetUniforms");
+            WorldUtils.CheckGLError("World.Draw SetUniforms");
 
             // Determine visible chunks based on RenderDistance
             Vector2i playerChunkCoords = GetChunkCoords(camera.Position);
@@ -363,7 +336,7 @@ namespace VoxelGame.World
                     }
                 }
             }
-            CheckGLError("World.Draw DrawChunks");
+            WorldUtils.CheckGLError("World.Draw DrawChunks");
         }
 
         public void Dispose()
@@ -407,7 +380,7 @@ namespace VoxelGame.World
             _cancellationSource.Dispose();
 
             GC.SuppressFinalize(this);
-            CheckGLError("World.Dispose");
+            WorldUtils.CheckGLError("World.Dispose");
             Console.WriteLine("World Disposed.");
         }
 
@@ -532,15 +505,5 @@ namespace VoxelGame.World
             }
         }
 
-        // Helper to check for errors
-        private static void CheckGLError(string stage)
-        {
-            var error = GL.GetError();
-            if (error != ErrorCode.NoError)
-            {
-                Console.WriteLine($"!!!!!!!! OpenGL Error [{stage}]: {error} !!!!!!!!");
-                // System.Diagnostics.Debugger.Break(); // Optional: Break in debugger
-            }
-        }
     }
 }
