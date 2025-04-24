@@ -13,22 +13,26 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="NAudio.Vorbis" Version="1.4.0" />
     <PackageReference Include="OpenTK" Version="4.9.4" />
     <PackageReference Include="SharpNoise" Version="0.12.1.1" />
     <PackageReference Include="StbImageSharp" Version="2.30.15" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Shaders\shader.vert">
+    <None Update="Assets\Shaders\**\*">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Shaders\shader.frag">
+    <None Update="Assets\Textures\**\*">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Textures\**\*">
+    <None Update="Assets\Audio\**\*.wav">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Assets\Audio\**\*.ogg">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-  
+
 </Project>
 
