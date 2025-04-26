@@ -23,7 +23,7 @@ namespace VoxelGame.Player
         private World.World _world;
         private float _blockBreakCooldown = 0.0f; // Cooldown timer for breaking
         private float _blockPlaceCooldown = 0.0f; // Cooldown timer for placing
-        private const float BlockActionInterval = 0.2f; // Time between block actions (break or place)
+        private const float BlockActionInterval = 0.1f; // Time between block actions (break or place)
 
         public Player(Vector3 startPosition, float aspectRatio, CollisionManager collisionManager, World.World world)
         {
@@ -149,7 +149,7 @@ namespace VoxelGame.Player
             // --- Block Targeting Raycast (for highlighting and actions) ---
             // Use the *updated* camera position and direction for the raycast
             // Increased reach slightly for placement consistency
-            const float reachDistance = 5.0f; 
+            const float reachDistance = 10.0f; 
             bool isTargetingBlock = _world.Raycast(PlayerCamera.Position, PlayerCamera.Front, reachDistance, out Vector3 hitBlockPos, out Vector3 adjacentBlockPos);
 
             if (isTargetingBlock)

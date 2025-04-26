@@ -22,6 +22,8 @@ namespace VoxelGame.Core
         private World.World _world = null!;
         private Player.Player _player = null!;
         private CollisionManager _collisionManager = null!;
+        private AudioManager _audioManager = null!; // Add AudioManager field
+        private int _keySoundBuffer = 0; // Store the buffer handle for the sound
 
         // Input state variables
         private bool _firstMove = true;
@@ -52,6 +54,17 @@ namespace VoxelGame.Core
             base.OnLoad();
             Console.WriteLine("OpenGL Version: " + GL.GetString(StringName.Version));
 
+            // --- Initialize Audio Manager ---
+            _audioManager = new AudioManager();
+            if (!_audioManager.Initialize())
+            {
+                Console.WriteLine("!!! Audio Manager failed to initialize. Proceeding without audio. !!!");
+                // Optionally handle this more gracefully, maybe close the game?
+                // Set _audioManager to null to prevent further calls if initialization failed
+                _audioManager = null!;
+            }
+            CheckGLError("After Audio Init"); // Check GL error just in case, though unlikely from audio
+
             // --- GLFW Framebuffer Size ---
             unsafe
             {
@@ -77,9 +90,26 @@ namespace VoxelGame.Core
 
             // --- Texture Loading ---
             // Assuming you have a "grass_block.png" in a "Textures" folder next to your executable
-            string texturePath = Path.Combine("Assets", "Textures", "grass_block.png");
+            string texturePath = Path.Combine(baseDirectory, "Assets", "Textures", "grass_block.png"); // Use baseDirectory
             _blockTexture = new Texture(texturePath);
             CheckGLError("After Texture Load");
+
+            // --- Load Startup Sound ---
+            if (_audioManager != null) // Only load if manager initialized successfully
+            {
+                string audioPath = Path.Combine(baseDirectory, "Assets", "Audio", "Key.wav"); // Use baseDirectory
+                // Note: The file tree showed Key.ogg, but the prompt requested Key.wav.
+                // The current AudioManager only supports WAV.
+                _keySoundBuffer = _audioManager.LoadWav(audioPath);
+                if (_keySoundBuffer != 0)
+                {
+                    _audioManager.Play(_keySoundBuffer, true); // Play looping
+                }
+                else
+                {
+                    Console.WriteLine($"Warning: Failed to load or play startup sound: {audioPath}");
+                }
+            }
 
             // --- Load World Edits & Determine Seed ---
             _worldSeed = ChunkEdits.LoadAllEdits(); // Load edits first, get seed
@@ -253,6 +283,7 @@ namespace VoxelGame.Core
             _world?.Dispose();
             _shader?.Dispose();
             _blockTexture?.Dispose(); // Dispose the texture
+            _audioManager?.Dispose(); // Dispose the audio manager
 
             base.OnUnload();
             CheckGLError("OnUnload");

@@ -436,6 +436,18 @@ namespace VoxelGame.World
             {
                 // Convert adjacent position to integer coordinates for block placement
                 Vector3i placePos = new Vector3i((int)Math.Floor(adjacentBlockPos.X), (int)Math.Floor(adjacentBlockPos.Y), (int)Math.Floor(adjacentBlockPos.Z));
+                // Get camera position as integer coordinates
+                Vector3i cameraPos = new Vector3i((int)Math.Floor(camera.Position.X), (int)Math.Floor(camera.Position.Y), (int)Math.Floor(camera.Position.Z));
+
+                // if X and Z are the same
+                if (placePos.X == cameraPos.X && placePos.Z == cameraPos.Z){
+                    // check if y is the same, or y is one less than cameraPos.y
+                    if (placePos.Y == cameraPos.Y || placePos.Y == cameraPos.Y - 1 || placePos.Y == cameraPos.Y - 2)
+                    {
+                        return; // Don't place a block in the same position as the player
+                    }
+                }
+
                 AddBlockAt(placePos, newState);
             }
         }
