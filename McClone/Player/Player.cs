@@ -3,6 +3,7 @@ using OpenTK.Windowing.GraphicsLibraryFramework;
 using System;
 using VoxelGame.World;
 using VoxelGame.Rendering; // For Camera
+using VoxelGame.Audio; // Added for AudioManager
 
 namespace VoxelGame.Player
 {
@@ -21,17 +22,19 @@ namespace VoxelGame.Player
         private bool _isGrounded;
         private CollisionManager _collisionManager;
         private World.World _world;
+        private AudioManager? _audioManager; // Added AudioManager reference
         private float _blockBreakCooldown = 0.0f; // Cooldown timer for breaking
         private float _blockPlaceCooldown = 0.0f; // Cooldown timer for placing
         private const float BlockActionInterval = 0.1f; // Time between block actions (break or place)
 
-        public Player(Vector3 startPosition, float aspectRatio, CollisionManager collisionManager, World.World world)
+        public Player(Vector3 startPosition, float aspectRatio, CollisionManager collisionManager, World.World world, AudioManager? audioManager) // Added AudioManager parameter
         {
             Position = startPosition;
             // Initialize camera at the correct eye level
             PlayerCamera = new Camera(startPosition + Vector3.UnitY * Size.Y * 0.9f, aspectRatio);
             _collisionManager = collisionManager;
             _world = world;
+            _audioManager = audioManager; // Store AudioManager
         }
 
         public void Update(float dt, KeyboardState input, MouseState mouse, bool firstMove, Vector2 lastMousePos)
@@ -158,21 +161,23 @@ namespace VoxelGame.Player
                 TargetedBlockPosition = new Vector3i((int)Math.Floor(hitBlockPos.X), (int)Math.Floor(hitBlockPos.Y), (int)Math.Floor(hitBlockPos.Z));
 
                 // --- Block Breaking Input (Left Click) ---
-                if (mouse.IsButtonDown(MouseButton.Left) && _blockBreakCooldown <= 0) 
+                if (mouse.IsButtonDown(MouseButton.Left) && _blockBreakCooldown <= 0)
                 {
                     var success = _world.RemoveBlockAt(TargetedBlockPosition.Value); // Use the stored value
                     if (success) {
+                        _audioManager?.PlayDigSound(); // Play dig sound
                         _blockBreakCooldown = BlockActionInterval; // Reset break cooldown
                         _blockPlaceCooldown = BlockActionInterval; // Also reset place cooldown to prevent instant place after break
                         TargetedBlockPosition = null; // Clear target immediately after breaking
                     }
                 }
                 // --- Block Placing Input (Right Click) ---
-                else if (mouse.IsButtonDown(MouseButton.Right) && _blockPlaceCooldown <= 0) 
+                else if (mouse.IsButtonDown(MouseButton.Right) && _blockPlaceCooldown <= 0)
                 {
                     // Use the AddBlockFromNormalVector which uses the adjacentBlockPos from the raycast
                     var success = _world.AddBlockFromNormalVector(PlayerCamera, reachDistance); // Default newState is 1 (solid)
                     if (success) {
+                        _audioManager?.PlayPlaceSound(); // Play place sound
                         _blockPlaceCooldown = BlockActionInterval; // Reset place cooldown
                         _blockBreakCooldown = BlockActionInterval; // Also reset break cooldown
                         // No need to clear TargetedBlockPosition here, as placement doesn't remove the target

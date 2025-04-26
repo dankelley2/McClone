@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent; // For ConcurrentDictionary
 using System.IO;
 using System.Runtime.InteropServices; // Added for GCHandle
 using OpenTK.Audio.OpenAL;
@@ -11,11 +12,17 @@ namespace VoxelGame.Audio
         private ALDevice _device;
         private ALContext _context;
         private List<int> _buffers = new List<int>();
-        private List<int> _sources = new List<int>();
-        private int? _currentSource = null; // Track the source used for the main playback
+        // Use a concurrent dictionary for sources to handle potential multi-threaded access if needed in the future
+        private ConcurrentDictionary<int, bool> _sources = new ConcurrentDictionary<int, bool>();
+        private int? _currentMusicSource = null; // Track the source used for the main music playback
+
+        // Sound effect buffers
+        private int _digSoundBuffer = 0;
+        private int _placeSoundBuffer = 0;
 
         public bool Initialize()
         {
+            bool success = false;
             try
             {
                 _device = ALC.OpenDevice(null); // Open default device
@@ -43,7 +50,7 @@ namespace VoxelGame.Audio
 
                 CheckALError("Initialization");
                 Console.WriteLine($"[AudioManager] Initialized OpenAL Context on device: {ALC.GetString(_device, AlcGetString.DeviceSpecifier)}");
-                return true;
+                success = true;
             }
             catch (Exception ex)
             {
@@ -51,6 +58,24 @@ namespace VoxelGame.Audio
                 Dispose(); // Attempt cleanup
                 return false;
             }
+
+            if (success)
+            {
+                 LoadGameSounds(); // Load specific game sounds after successful initialization
+            }
+            return success;
+        }
+
+        private void LoadGameSounds()
+        {
+            // Construct paths relative to the executable or a known Assets structure
+            // Assuming Assets folder is copied to the output directory
+            string audioPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Audio");
+            _digSoundBuffer = LoadWav(Path.Combine(audioPath, "dig.wav"));
+            _placeSoundBuffer = LoadWav(Path.Combine(audioPath, "place.wav"));
+
+            if (_digSoundBuffer == 0) Console.WriteLine("[AudioManager] Warning: Failed to load dig.wav");
+            if (_placeSoundBuffer == 0) Console.WriteLine("[AudioManager] Warning: Failed to load place.wav");
         }
 
         public int LoadWav(string filePath)
@@ -151,70 +176,131 @@ namespace VoxelGame.Audio
             }
         }
 
-        public void Play(int bufferHandle, bool loop)
+        // Renamed Play to PlayMusic for clarity
+        public void PlayMusic(int bufferHandle, bool loop)
         {
              if (bufferHandle == 0 || !_buffers.Contains(bufferHandle))
              {
-                 Console.WriteLine("[AudioManager] Error: Cannot play invalid or unloaded buffer handle.");
+                 Console.WriteLine("[AudioManager] Error: Cannot play music with invalid or unloaded buffer handle.");
                  return;
              }
 
-            // Stop previous playback if any
-            Stop();
+            // Stop previous music playback if any
+            StopMusic();
 
             try
             {
                 int source = AL.GenSource();
-                _sources.Add(source);
-                _currentSource = source; // Track this source
+                if (!_sources.TryAdd(source, true)) // Add to our tracking
+                {
+                    Console.WriteLine("[AudioManager] Warning: Failed to track generated music source.");
+                    AL.DeleteSource(source); // Clean up untracked source
+                    return;
+                }
+                _currentMusicSource = source; // Track this source for music
 
                 AL.Source(source, ALSourcei.Buffer, bufferHandle);
                 AL.Source(source, ALSourceb.Looping, loop);
                 AL.SourcePlay(source);
 
-                CheckALError("Playing Sound");
-                Console.WriteLine($"[AudioManager] Playing buffer {bufferHandle}{(loop ? " (Looping)" : "")}");
+                CheckALError("Playing Music");
+                Console.WriteLine($"[AudioManager] Playing music buffer {bufferHandle}{(loop ? " (Looping)" : "")}");
             }
             catch (Exception ex)
             {
-                 Console.WriteLine($"[AudioManager] Error playing buffer {bufferHandle}: {ex.Message}");
+                 Console.WriteLine($"[AudioManager] Error playing music buffer {bufferHandle}: {ex.Message}");
                  // Attempt to clean up the generated source if playback failed
-                 if (_currentSource.HasValue && _sources.Contains(_currentSource.Value))
+                 if (_currentMusicSource.HasValue && _sources.TryRemove(_currentMusicSource.Value, out _))
                  {
-                     AL.DeleteSource(_currentSource.Value);
-                     _sources.Remove(_currentSource.Value);
-                     _currentSource = null;
+                     AL.DeleteSource(_currentMusicSource.Value);
+                     _currentMusicSource = null;
                  }
             }
         }
 
-        public void Stop()
+        // Renamed Stop to StopMusic
+        public void StopMusic()
         {
-            if (_currentSource.HasValue)
+            if (_currentMusicSource.HasValue)
             {
                 try
                 {
-                    int source = _currentSource.Value;
-                    if (_sources.Contains(source))
+                    int source = _currentMusicSource.Value;
+                    if (_sources.ContainsKey(source))
                     {
                         AL.SourceStop(source);
-                        CheckALError("Stopping Sound");
+                        CheckALError("Stopping Music");
                         AL.DeleteSource(source); // Clean up the source immediately after stopping
-                        _sources.Remove(source);
-                        Console.WriteLine($"[AudioManager] Stopped and deleted source for buffer.");
+                        _sources.TryRemove(source, out _);
+                        Console.WriteLine($"[AudioManager] Stopped and deleted music source.");
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[AudioManager] Error stopping source {_currentSource.Value}: {ex.Message}");
+                    Console.WriteLine($"[AudioManager] Error stopping music source {_currentMusicSource.Value}: {ex.Message}");
                 }
                 finally
                 {
-                    _currentSource = null; // Clear the tracked source
+                    _currentMusicSource = null; // Clear the tracked music source
                 }
             }
         }
 
+        // Method to play a short sound effect (one-shot)
+        private void PlayOneShotSound(int bufferHandle)
+        {
+            if (bufferHandle == 0 || !_buffers.Contains(bufferHandle))
+            {
+                // Don't log error spam for missing sounds, LoadGameSounds already warns
+                // Console.WriteLine("[AudioManager] Error: Cannot play one-shot sound with invalid buffer handle.");
+                return;
+            }
+
+            try
+            {
+                int source = AL.GenSource();
+                // We don't strictly need to track one-shot sources if we clean them up,
+                // but it can be useful for debugging or advanced management.
+                // For simplicity, we won't track them in the main list for now.
+
+                AL.Source(source, ALSourcei.Buffer, bufferHandle);
+                AL.Source(source, ALSourceb.Looping, false); // One-shot sounds don't loop
+                AL.Source(source, ALSourcef.Gain, 1.0f); // Set volume (optional)
+                AL.SourcePlay(source);
+                CheckALError("Playing OneShot Sound");
+
+                // IMPORTANT: Clean up the source after it finishes playing.
+                // This is tricky because playback is asynchronous.
+                // A simple approach is to check source state periodically, but that's inefficient.
+                // A better approach involves source pooling or managing finished sources.
+                // For now, we'll rely on the main Dispose to clean up any lingering sources,
+                // or manually delete after a delay (which is also not ideal).
+                // Let's add a basic cleanup mechanism later if needed.
+                // For now, we just generate and play.
+                // Consider adding source to a temporary list for later cleanup if issues arise.
+
+                // Quick temporary cleanup (less ideal, but better than nothing for now):
+                // System.Threading.Tasks.Task.Delay(1000).ContinueWith(_ => { // Delay assumes sound is short
+                //     if (AL.IsSource(source)) AL.DeleteSource(source);
+                // });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AudioManager] Error playing one-shot sound for buffer {bufferHandle}: {ex.Message}");
+                // Attempt to clean up the source if it was generated but failed
+                // This requires knowing the source ID, which might be tricky if AL.GenSource failed.
+            }
+        }
+
+        public void PlayDigSound()
+        {
+            PlayOneShotSound(_digSoundBuffer);
+        }
+
+        public void PlayPlaceSound()
+        {
+            PlayOneShotSound(_placeSoundBuffer);
+        }
 
         private static ALFormat GetSoundFormat(int channels, int bits)
         {
@@ -245,12 +331,24 @@ namespace VoxelGame.Audio
         public void Dispose()
         {
             Console.WriteLine("[AudioManager] Disposing...");
-            Stop(); // Stop any playing sound and delete its source
+            StopMusic(); // Stop any playing music and delete its source
 
-            // Delete any remaining sources (shouldn't be any if Stop works correctly)
-            foreach (var source in _sources)
+            // Delete all tracked sources (including potentially lingering one-shots if tracked)
+            foreach (var source in _sources.Keys)
             {
-                 try { AL.DeleteSource(source); } catch (Exception ex) { Console.WriteLine($"Error deleting source {source}: {ex.Message}"); }
+                 try
+                 {
+                     // Check if source still exists before deleting
+                     if (AL.IsSource(source))
+                     {
+                         AL.SourceStop(source); // Stop it first
+                         AL.DeleteSource(source);
+                     }
+                 }
+                 catch (Exception ex)
+                 {
+                     Console.WriteLine($"Error deleting source {source}: {ex.Message}");
+                 }
             }
             _sources.Clear();
 

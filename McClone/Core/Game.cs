@@ -103,7 +103,7 @@ namespace VoxelGame.Core
                 _keySoundBuffer = _audioManager.LoadWav(audioPath);
                 if (_keySoundBuffer != 0)
                 {
-                    _audioManager.Play(_keySoundBuffer, true); // Play looping
+                    _audioManager.PlayMusic(_keySoundBuffer, true); // Play looping
                 }
                 else
                 {
@@ -136,7 +136,7 @@ namespace VoxelGame.Core
 
             // --- Instantiate Player (needed for Size.Y, use temp aspect ratio) ---
             float tempAspectRatio = (Size.X > 0 && Size.Y > 0) ? Size.X / (float)Size.Y : 16.0f / 9.0f;
-            _player = new Player.Player(Vector3.Zero, tempAspectRatio, _collisionManager, _world); // Temp position
+            _player = new Player.Player(Vector3.Zero, tempAspectRatio, _collisionManager, _world, _audioManager); // Temp position
 
             // Calculate correct start Y
             float feetStartY = startHeight + 0.5f; // Top surface of the block
