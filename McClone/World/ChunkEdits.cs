@@ -1,36 +1,41 @@
-using System.IO;
-using System.Linq;
-using System.Text.Json;
 using OpenTK.Mathematics;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO; // Added
+using System.Linq; // Added
+using System.Text.Json; // Added
+using System.Text.Json.Serialization; // Added for attributes if needed
 
 namespace VoxelGame.World
 {
-    // --- Serialization Data Structures ---
-    // These structures are designed for easy JSON serialization/deserialization
+    // --- Serialization Data Structures (Optimized) ---
 
-    internal class BlockEditData
-    {
-        public byte X { get; set; }
-        public byte Z { get; set; }
-        public byte State { get; set; }
-    }
-
+    // Represents a single layer's edits as a 2D array.
+    // Using byte is sufficient for block states (0-255).
     internal class LayerEditData
     {
         public int YLevel { get; set; }
-        public List<BlockEditData> Blocks { get; set; } = new();
+        // Stores the full 16x16 layer state.
+        // A value of NO_EDIT_MARKER indicates the original generated block should be used.
+        // Assumes Chunk.ChunkSize is 16. If not, this needs adjustment.
+        public byte[][] Blocks { get; set; } = null!; // Initialize later
+
+        // Define a marker for unedited blocks within the saved array.
+        // Choose a value unlikely to be a valid block state.
+        [JsonIgnore] // Don't serialize this constant itself
+        public const byte NO_EDIT_MARKER = 255;
     }
 
+    // Represents all edits for a single chunk.
     internal class ChunkEditData
     {
         public int ChunkX { get; set; }
-        public int ChunkZ { get; set; } // Changed from Y to Z for clarity, assuming Vector2i uses X,Y for horizontal plane
+        public int ChunkZ { get; set; }
         public List<LayerEditData> Layers { get; set; } = new();
     }
 
+    // Represents the overall save file structure.
     internal class SaveData
     {
         public int WorldSeed { get; set; }
@@ -80,6 +85,7 @@ namespace VoxelGame.World
         /// <returns>The ChunkEdits instance or null if no edits have been recorded for this chunk.</returns>
         public static ChunkEdits? GetEdits(Vector2i coords)
         {
+            // Assuming Vector2i Y corresponds to World Z
             _allEdits.TryGetValue((coords.X, coords.Y), out var edits);
             return edits;
         }
@@ -96,17 +102,18 @@ namespace VoxelGame.World
         public static void RecordEdit(Vector2i coords, int y, byte x, byte z, byte newState)
         {
             // Get or create the ChunkEdits instance for these coordinates
+            // Assuming Vector2i Y corresponds to World Z
             var edits = _allEdits.GetOrAdd((coords.X, coords.Y), key => new ChunkEdits(new Vector2i(key.Item1, key.Item2)));
 
             // Get or create the dictionary for the specific Y-level
             var layerEdits = edits._editedLayers.GetOrAdd(y, _ => new ConcurrentDictionary<(byte x, byte z), byte>());
 
             // Add or update the specific block edit for (x, z) at this y-level
-            // Note: This currently stores *all* changes, including setting back to default.
-            // Optimization: Could compare newState to the original generated state and remove the edit if they match.
             layerEdits[((byte)x, (byte)z)] = newState;
 
-            // TODO: Add persistence logic here (e.g., mark for saving to disk)
+            // TODO: Consider if comparing newState to original generated state is needed
+            // to potentially *remove* an edit if it matches the original terrain.
+            // This would require access to the world generator or original chunk data.
         }
 
         /// <summary>
@@ -116,12 +123,14 @@ namespace VoxelGame.World
         /// <param name="chunk">The chunk to apply edits to.</param>
         internal void ApplyToChunk(Chunk chunk)
         {
-            if (chunk.ChunkCoords != this.ChunkCoords)
+            // Assuming Vector2i Y corresponds to World Z
+            if (chunk.ChunkCoords.X != this.ChunkCoords.X || chunk.ChunkCoords.Y != this.ChunkCoords.Y)
             {
                 Console.WriteLine($"Warning: Attempting to apply edits from {this.ChunkCoords} to chunk {chunk.ChunkCoords}.");
                 return;
             }
 
+            bool appliedAnyEdit = false;
             foreach (var kvpY in _editedLayers)
             {
                 int y = kvpY.Key;
@@ -141,10 +150,14 @@ namespace VoxelGame.World
 
                     // Use the chunk's method to set the state, handling layer creation
                     chunk.SetLocalVoxelStateInternal(x, y, z, state);
+                    appliedAnyEdit = true;
                 }
             }
-             // After applying edits, the chunk mesh needs rebuilding
-            chunk.MarkDirty();
+             // After applying edits, the chunk mesh needs rebuilding if any edit was applied
+            if (appliedAnyEdit)
+            {
+                chunk.MarkDirty();
+            }
         }
 
         private static string GetSaveFilePath()
@@ -156,47 +169,71 @@ namespace VoxelGame.World
         }
 
         /// <summary>
-        /// Saves all current chunk edits and the world seed to a JSON file in the AppData directory.
+        /// Saves all current chunk edits and the world seed to a compact JSON file in the AppData directory.
         /// </summary>
         /// <param name="worldSeed">The seed of the world being saved.</param>
         public static void SaveAllEdits(int worldSeed)
         {
             var saveData = new SaveData { WorldSeed = worldSeed };
+            const int chunkSize = Chunk.ChunkSize; // Assuming Chunk.ChunkSize is accessible and constant
 
             foreach (var kvpChunk in _allEdits)
             {
-                var chunkCoords = kvpChunk.Key;
+                var chunkCoordsTuple = kvpChunk.Key;
                 var chunkEdits = kvpChunk.Value;
+
+                // Skip saving if there are no edited layers for this chunk
+                if (chunkEdits._editedLayers.IsEmpty) continue;
 
                 var chunkEditData = new ChunkEditData
                 {
-                    ChunkX = chunkCoords.Item1,
-                    ChunkZ = chunkCoords.Item2 // Assuming Item2 is Z
+                    ChunkX = chunkCoordsTuple.Item1,
+                    ChunkZ = chunkCoordsTuple.Item2
                 };
 
                 foreach (var kvpLayer in chunkEdits._editedLayers)
                 {
                     var yLevel = kvpLayer.Key;
-                    var layerBlocks = kvpLayer.Value;
+                    var layerBlockEdits = kvpLayer.Value; // The dictionary of (x,z) -> state
 
-                    var layerEditData = new LayerEditData { YLevel = yLevel };
+                    // Skip saving if this specific layer has no edits recorded
+                    if (layerBlockEdits.IsEmpty) continue;
 
-                    foreach (var kvpBlock in layerBlocks)
+                    // Create the 2D array for this layer
+                    var layerBlocksArray = new byte[chunkSize][];
+                    for (int i = 0; i < chunkSize; i++)
                     {
-                        layerEditData.Blocks.Add(new BlockEditData
+                        layerBlocksArray[i] = new byte[chunkSize];
+                        // Initialize with the NO_EDIT_MARKER
+                        Array.Fill(layerBlocksArray[i], LayerEditData.NO_EDIT_MARKER);
+                    }
+
+                    // Populate the array with actual edits
+                    foreach (var kvpBlock in layerBlockEdits)
+                    {
+                        byte x = kvpBlock.Key.x;
+                        byte z = kvpBlock.Key.z;
+                        byte state = kvpBlock.Value;
+
+                        if (x < chunkSize && z < chunkSize) // Bounds check
                         {
-                            X = kvpBlock.Key.x,
-                            Z = kvpBlock.Key.z,
-                            State = kvpBlock.Value
-                        });
+                            layerBlocksArray[x][z] = state;
+                        }
+                        else
+                        {
+                             Console.WriteLine($"Warning: Edit ({x},{z}) at Y={yLevel} in chunk ({chunkEditData.ChunkX},{chunkEditData.ChunkZ}) is outside expected chunk size {chunkSize}. Skipping save for this block.");
+                        }
                     }
-                    // Only add layer data if there are actual block edits in it
-                    if (layerEditData.Blocks.Any())
+
+                    var layerEditData = new LayerEditData
                     {
-                        chunkEditData.Layers.Add(layerEditData);
-                    }
+                        YLevel = yLevel,
+                        Blocks = layerBlocksArray
+                    };
+                    chunkEditData.Layers.Add(layerEditData);
                 }
-                 // Only add chunk data if there are actual layer edits in it
+
+                // Only add chunk data if it actually contains edited layers
                 if (chunkEditData.Layers.Any())
                 {
                     saveData.Edits.Add(chunkEditData);
@@ -227,6 +264,7 @@ namespace VoxelGame.World
         {
             string filePath = GetSaveFilePath();
             int loadedSeed = 0; // Default seed if load fails
+            const int chunkSize = Chunk.ChunkSize; // Assuming Chunk.ChunkSize is accessible and constant
 
             if (!File.Exists(filePath))
             {
@@ -259,16 +297,40 @@ namespace VoxelGame.World
 
                     foreach (var layerEditData in chunkEditData.Layers)
                     {
-                        var layerEdits = chunkEdits._editedLayers.GetOrAdd(layerEditData.YLevel, _ => new ConcurrentDictionary<(byte x, byte z), byte>());
+                        var layerEditsDict = chunkEdits._editedLayers.GetOrAdd(layerEditData.YLevel, _ => new ConcurrentDictionary<(byte x, byte z), byte>());
 
-                        foreach (var blockEditData in layerEditData.Blocks)
+                        byte[][] layerBlocksArray = layerEditData.Blocks;
+
+                        // Validate array dimensions (optional but good practice)
+                        if (layerBlocksArray == null || layerBlocksArray.Length != chunkSize || layerBlocksArray.Any(row => row == null || row.Length != chunkSize))
                         {
-                            layerEdits[(blockEditData.X, blockEditData.Z)] = blockEditData.State;
+                            Console.WriteLine($"Warning: Invalid block array dimensions for chunk ({chunkEditData.ChunkX},{chunkEditData.ChunkZ}), Y={layerEditData.YLevel}. Skipping layer.");
+                            continue;
+                        }
+
+
+                        for (byte x = 0; x < chunkSize; x++)
+                        {
+                            for (byte z = 0; z < chunkSize; z++)
+                            {
+                                byte state = layerBlocksArray[x][z];
+                                // If the state is not the marker, record it as an edit
+                                if (state != LayerEditData.NO_EDIT_MARKER)
+                                {
+                                    layerEditsDict[(x, z)] = state;
+                                }
+                            }
                         }
                     }
                 }
                 Console.WriteLine($"World edits loaded successfully from {filePath}. World Seed: {loadedSeed}");
 
+            }
+            catch (JsonException jsonEx)
+            {
+                 Console.WriteLine($"Error deserializing world edits JSON from {filePath}: {jsonEx.Message}");
+                 _allEdits.Clear(); // Clear edits on exception
+                 loadedSeed = 0; // Reset seed to default on error
             }
             catch (Exception ex)
             {
