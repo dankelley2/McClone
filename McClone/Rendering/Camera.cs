@@ -1,5 +1,6 @@
 using OpenTK.Mathematics;
 using OpenTK.Windowing.GraphicsLibraryFramework; // For Keys enum
+using System; // Added for MathF
 
 namespace VoxelGame.Rendering
 {
@@ -63,14 +64,40 @@ namespace VoxelGame.Rendering
             // Constrain pitch to avoid flipping
             if (constrainPitch)
             {
-                if (Pitch > 89.0f)
-                    Pitch = 89.0f;
-                if (Pitch < -89.0f)
-                    Pitch = -89.0f;
+                Pitch = Math.Clamp(Pitch, -89.0f, 89.0f); // Use Math.Clamp
             }
 
             UpdateVectors();
         }
+
+        /// <summary>
+        /// Sets the camera's pitch and yaw directly and updates direction vectors.
+        /// Also updates the camera's position based on the player's base position and new orientation.
+        /// </summary>
+        /// <param name="pitch">The new pitch value.</param>
+        /// <param name="yaw">The new yaw value.</param>
+        /// <param name="playerPosition">The player's base position (feet level).</param>
+        /// <param name="playerHeight">The player's height.</param>
+        public void SetOrientation(float pitch, float yaw, Vector3 playerPosition, float playerHeight)
+        {
+            Pitch = Math.Clamp(pitch, -89.0f, 89.0f); // Clamp pitch
+            Yaw = yaw;
+            UpdateVectors();
+            // Recalculate camera position based on player's base position and height
+            Position = playerPosition + Vector3.UnitY * playerHeight * 0.9f;
+        }
+
+        // Overload for setting orientation without explicitly providing player position/height
+        // Assumes the Position property is already correctly set or will be set immediately after.
+        public void SetOrientation(float pitch, float yaw)
+        {
+            Pitch = Math.Clamp(pitch, -89.0f, 89.0f); // Clamp pitch
+            Yaw = yaw;
+            UpdateVectors();
+            // Note: This overload doesn't automatically adjust Position based on player height.
+            // Ensure Position is set correctly elsewhere when using this.
+        }
+
 
         // Public accessors for direction vectors if needed
         public Vector3 Front => _front;

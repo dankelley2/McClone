@@ -32,6 +32,8 @@ namespace VoxelGame.Core
         // Flag to indicate initial chunk loading is complete
         private bool _initialLoadComplete = false;
         private Vector3 _initialPlayerPosition; // Store calculated start position
+        private float? _initialPlayerPitch; // Store loaded pitch
+        private float? _initialPlayerYaw; // Store loaded yaw
         private int _worldSeed; // Store the world seed
 
         public Game(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings)
@@ -112,7 +114,11 @@ namespace VoxelGame.Core
             }
 
             // --- Load World Edits & Determine Seed ---
-            _worldSeed = ChunkEdits.LoadAllEdits(); // Load edits first, get seed
+            var (loadedSeed, loadedPosition, loadedPitch, loadedYaw) = ChunkEdits.LoadAllEdits(); // Load edits, position, and orientation
+            _worldSeed = loadedSeed;
+            _initialPlayerPitch = loadedPitch; // Store loaded orientation
+            _initialPlayerYaw = loadedYaw;
+
             if (_worldSeed == 0) // If loading failed or no file, use a default/random seed
             {
                 _worldSeed = new Random().Next(); // Or use a fixed default like 12345
@@ -129,23 +135,32 @@ namespace VoxelGame.Core
             _world.Initialize(); // Initializes world structure, cube data, starts background task
             CheckGLError("After World Init");
 
-            // --- Calculate Player Start Position ---
-            const int StartX = 0;
-            const int StartZ = 0;
-            int startHeight = _world.GetHeight(StartX, StartZ) + 2;
-
             // --- Instantiate Player (needed for Size.Y, use temp aspect ratio) ---
             float tempAspectRatio = (Size.X > 0 && Size.Y > 0) ? Size.X / (float)Size.Y : 16.0f / 9.0f;
+            // Player constructor doesn't need pitch/yaw yet, set later
             _player = new Player.Player(Vector3.Zero, tempAspectRatio, _collisionManager, _world, _audioManager); // Temp position
 
-            // Calculate correct start Y
-            float feetStartY = startHeight + 0.5f; // Top surface of the block
-            float headStartY = feetStartY + _player.Size.Y + 0.01f; // Add player height + epsilon
-            _initialPlayerPosition = new Vector3(StartX, headStartY, StartZ);
-            Console.WriteLine($"Calculated ground height at ({StartX},{StartZ}) to {startHeight}. Player Start: {_initialPlayerPosition}");
+            // --- Determine Player Start Position ---
+            if (loadedPosition.HasValue)
+            {
+                _initialPlayerPosition = loadedPosition.Value;
+                Console.WriteLine($"Using saved player position: {_initialPlayerPosition}");
+            }
+            else
+            {
+                // Calculate default start position if none was loaded
+                const int StartX = 0;
+                const int StartZ = 0;
+                int startHeight = _world.GetHeight(StartX, StartZ) + 2; // Add buffer height
+                float feetStartY = startHeight + 0.5f; // Top surface of the block below feet
+                float headStartY = feetStartY + _player.Size.Y + 0.01f; // Add player height + epsilon
+                _initialPlayerPosition = new Vector3(StartX, headStartY, StartZ);
+                Console.WriteLine($"Calculated default ground height at ({StartX},{StartZ}) to {startHeight}. Player Start: {_initialPlayerPosition}");
+            }
+
 
             // --- Queue Initial Chunks ---
-            _world.QueueInitialChunks(_initialPlayerPosition);
+            _world.QueueInitialChunks(_initialPlayerPosition); // Queue chunks around the final start position
             Console.WriteLine("OnLoad Complete. Initial chunk loading initiated.");
         }
 
@@ -190,12 +205,23 @@ namespace VoxelGame.Core
 
                     // Apply loaded edits AFTER initial chunks are generated but BEFORE game starts
                     // Note: Chunk.GenerateTerrain now applies edits internally if they exist
-                    // We might still need a way to trigger rebuilds if edits were loaded *after* initial gen?
-                    // For now, assuming GenerateTerrain handles applying loaded edits correctly.
 
+                    // Set the player's position *after* initial chunks are ready
                     _player.Position = _initialPlayerPosition;
-                    _player.PlayerCamera.Position = _initialPlayerPosition;
-                    _player.UpdateAspectRatio(Size.X / (float)Size.Y);
+                    // Set the player's orientation if loaded
+                    if (_initialPlayerPitch.HasValue && _initialPlayerYaw.HasValue)
+                    {
+                        // Use the SetOrientation overload that takes player position and height
+                        _player.PlayerCamera.SetOrientation(_initialPlayerPitch.Value, _initialPlayerYaw.Value, _initialPlayerPosition, _player.Size.Y);
+                        Console.WriteLine($"Applied saved orientation: Pitch={_initialPlayerPitch.Value}, Yaw={_initialPlayerYaw.Value}");
+                    }
+                    else
+                    {
+                        // Ensure camera starts at the correct eye level based on the final position even if orientation wasn't loaded
+                        _player.PlayerCamera.Position = _initialPlayerPosition + Vector3.UnitY * _player.Size.Y * 0.9f;
+                    }
+
+                    _player.UpdateAspectRatio(Size.X / (float)Size.Y); // Update aspect ratio now
 
                     CursorState = CursorState.Grabbed;
                     _firstMove = true;
@@ -269,14 +295,14 @@ namespace VoxelGame.Core
         {
             Console.WriteLine("Starting OnUnload...");
 
-            // --- Save World Edits ---
-            if (_world != null)
+            // --- Save World Edits, Player Position & Orientation ---
+            if (_world != null && _player != null) // Ensure both world and player exist
             {
-                ChunkEdits.SaveAllEdits(_world.WorldSeed); // Save edits using the world's seed
+                ChunkEdits.SaveAllEdits(_world.WorldSeed, _player.Position, _player.PlayerCamera.Pitch, _player.PlayerCamera.Yaw); // Save state
             }
             else
             {
-                Console.WriteLine("Warning: World object was null during OnUnload, cannot save edits.");
+                Console.WriteLine("Warning: World or Player object was null during OnUnload, cannot save state.");
             }
 
             // --- World and Managers Cleanup ---

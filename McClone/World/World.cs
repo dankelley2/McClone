@@ -19,7 +19,7 @@ namespace VoxelGame.World
         private ConcurrentDictionary<(int, int), Chunk> _activeChunks = new(); // Thread-safe dictionary
         private BlockingCollection<(int, int)> _generationQueue = new(new ConcurrentQueue<(int, int)>()); // Queue for coords needing generation or mesh rebuild
         private ConcurrentQueue<Chunk> _buildQueue = new(); // Queue for chunks ready for GL buffer updates (on main thread)
-        private const int RenderDistance = 2;
+        private const int RenderDistance = 12;
         private const int LoadDistance = RenderDistance + 2; // Load distance slightly larger to preload
 
         // Background Task Management

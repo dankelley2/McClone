@@ -39,6 +39,13 @@ namespace VoxelGame.World
     internal class SaveData
     {
         public int WorldSeed { get; set; }
+        // Store player position components as nullable floats for backward compatibility
+        public float? PlayerPositionX { get; set; }
+        public float? PlayerPositionY { get; set; }
+        public float? PlayerPositionZ { get; set; }
+        // Store player orientation components as nullable floats
+        public float? PlayerPitch { get; set; }
+        public float? PlayerYaw { get; set; }
         public List<ChunkEditData> Edits { get; set; } = new();
     }
 
@@ -169,12 +176,23 @@ namespace VoxelGame.World
         }
 
         /// <summary>
-        /// Saves all current chunk edits and the world seed to a compact JSON file in the AppData directory.
+        /// Saves all current chunk edits, the world seed, player position, and orientation to a compact JSON file.
         /// </summary>
         /// <param name="worldSeed">The seed of the world being saved.</param>
-        public static void SaveAllEdits(int worldSeed)
+        /// <param name="playerPosition">The player's current position.</param>
+        /// <param name="playerPitch">The player camera's pitch.</param>
+        /// <param name="playerYaw">The player camera's yaw.</param>
+        public static void SaveAllEdits(int worldSeed, Vector3 playerPosition, float playerPitch, float playerYaw)
         {
-            var saveData = new SaveData { WorldSeed = worldSeed };
+            var saveData = new SaveData
+            {
+                WorldSeed = worldSeed,
+                PlayerPositionX = playerPosition.X,
+                PlayerPositionY = playerPosition.Y,
+                PlayerPositionZ = playerPosition.Z,
+                PlayerPitch = playerPitch,
+                PlayerYaw = playerYaw
+            };
             const int chunkSize = Chunk.ChunkSize; // Assuming Chunk.ChunkSize is accessible and constant
 
             foreach (var kvpChunk in _allEdits)
@@ -240,37 +258,43 @@ namespace VoxelGame.World
                 }
             }
 
+
             try
             {
                 string filePath = GetSaveFilePath();
                 // Use minimal options for compacted JSON
                 string jsonString = JsonSerializer.Serialize(saveData, new JsonSerializerOptions { WriteIndented = false });
                 File.WriteAllText(filePath, jsonString);
-                Console.WriteLine($"World edits saved to {filePath}");
+                Console.WriteLine($"World data saved to {filePath}"); // Updated message
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error saving world edits: {ex.Message}");
+                Console.WriteLine($"Error saving world data: {ex.Message}"); // Updated message
                 // Consider more robust error handling/logging
             }
         }
 
         /// <summary>
-        /// Loads chunk edits from the JSON file in the AppData directory.
+        /// Loads chunk edits, player position, and orientation from the JSON file.
         /// Clears existing edits before loading.
         /// </summary>
-        /// <returns>The world seed loaded from the file, or a default value (e.g., 0) if the file doesn't exist or fails to load.</returns>
-        public static int LoadAllEdits()
+        /// <returns>A tuple containing the loaded world seed, an optional player position (Vector3?),
+        /// an optional player pitch (float?), and an optional player yaw (float?).
+        /// Returns defaults (0, null, null, null) if the file doesn't exist or fails to load.</returns>
+        public static (int seed, Vector3? playerPosition, float? playerPitch, float? playerYaw) LoadAllEdits()
         {
             string filePath = GetSaveFilePath();
             int loadedSeed = 0; // Default seed if load fails
+            Vector3? loadedPlayerPosition = null; // Default position is null
+            float? loadedPlayerPitch = null; // Default pitch is null
+            float? loadedPlayerYaw = null; // Default yaw is null
             const int chunkSize = Chunk.ChunkSize; // Assuming Chunk.ChunkSize is accessible and constant
 
             if (!File.Exists(filePath))
             {
-                Console.WriteLine("No world edit save file found. Starting with no edits.");
+                Console.WriteLine("No world save file found. Starting fresh.");
                  _allEdits.Clear(); // Ensure edits are cleared even if file doesn't exist
-                return loadedSeed; // Return default seed
+                return (loadedSeed, loadedPlayerPosition, loadedPlayerPitch, loadedPlayerYaw); // Return defaults
             }
 
             try
@@ -282,11 +306,40 @@ namespace VoxelGame.World
                 {
                      Console.WriteLine($"Error: Failed to deserialize save data from {filePath}.");
                      _allEdits.Clear(); // Clear edits on failed deserialization
-                     return 0; // Return default seed
+                     return (0, null, null, null); // Return defaults
                 }
 
                 loadedSeed = saveData.WorldSeed;
-                _allEdits.Clear(); // Clear current edits before loading
+
+                // Attempt to load player position if present
+                if (saveData.PlayerPositionX.HasValue && saveData.PlayerPositionY.HasValue && saveData.PlayerPositionZ.HasValue)
+                {
+                    loadedPlayerPosition = new Vector3(
+                        saveData.PlayerPositionX.Value,
+                        saveData.PlayerPositionY.Value,
+                        saveData.PlayerPositionZ.Value
+                    );
+                    Console.WriteLine($"Loaded player position: {loadedPlayerPosition.Value}");
+                }
+                else
+                {
+                    Console.WriteLine("No player position found in save file.");
+                }
+
+                // Attempt to load player orientation if present
+                if (saveData.PlayerPitch.HasValue && saveData.PlayerYaw.HasValue)
+                {
+                    loadedPlayerPitch = saveData.PlayerPitch.Value;
+                    loadedPlayerYaw = saveData.PlayerYaw.Value;
+                    Console.WriteLine($"Loaded player orientation: Pitch={loadedPlayerPitch.Value}, Yaw={loadedPlayerYaw.Value}");
+                }
+                else
+                {
+                     Console.WriteLine("No player orientation found in save file.");
+                }
+
+
+                _allEdits.Clear(); // Clear current edits before loading chunk edits
 
                 foreach (var chunkEditData in saveData.Edits)
                 {
@@ -328,19 +381,25 @@ namespace VoxelGame.World
             }
             catch (JsonException jsonEx)
             {
-                 Console.WriteLine($"Error deserializing world edits JSON from {filePath}: {jsonEx.Message}");
+                 Console.WriteLine($"Error deserializing world save JSON from {filePath}: {jsonEx.Message}");
                  _allEdits.Clear(); // Clear edits on exception
                  loadedSeed = 0; // Reset seed to default on error
+                 loadedPlayerPosition = null; // Reset position on error
+                 loadedPlayerPitch = null; // Reset pitch on error
+                 loadedPlayerYaw = null; // Reset yaw on error
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error loading world edits from {filePath}: {ex.Message}");
+                Console.WriteLine($"Error loading world save from {filePath}: {ex.Message}");
                  _allEdits.Clear(); // Clear edits on exception
                 loadedSeed = 0; // Reset seed to default on error
+                loadedPlayerPosition = null; // Reset position on error
+                loadedPlayerPitch = null; // Reset pitch on error
+                loadedPlayerYaw = null; // Reset yaw on error
                 // Consider more robust error handling/logging
             }
 
-            return loadedSeed;
+            return (loadedSeed, loadedPlayerPosition, loadedPlayerPitch, loadedPlayerYaw);
         }
     }
 }
