@@ -426,9 +426,9 @@ namespace VoxelGame.World
         }
 
         // Performs a raycast from the camera and adds a block adjacent to the hit face.
-        public void AddBlockFromNormalVector(Camera camera, float maxDistance, byte newState = 1)
+        public bool AddBlockFromNormalVector(Camera camera, float maxDistance, byte newState = 1)
         {
-            if (newState == 0) return; // Cannot add air this way
+            if (newState == 0) return false; // Cannot add air this way
 
             bool hit = Raycast(camera.Position, camera.Front, maxDistance, out _, out Vector3 adjacentBlockPos);
 
@@ -444,12 +444,14 @@ namespace VoxelGame.World
                     // check if y is the same, or y is one less than cameraPos.y
                     if (placePos.Y == cameraPos.Y || placePos.Y == cameraPos.Y - 1 || placePos.Y == cameraPos.Y - 2)
                     {
-                        return; // Don't place a block in the same position as the player
+                        return false; // Don't place a block in the same position as the player
                     }
                 }
 
                 AddBlockAt(placePos, newState);
+                return true; // Block placed successfully
             }
+            return false; // No hit, no block placed
         }
 
         // Gets the state of a block at world coordinates
@@ -473,9 +475,9 @@ namespace VoxelGame.World
 
 
         // Removes a block at the specified world coordinates
-        public void RemoveBlockAt(Vector3i worldBlockPos)
+        public bool RemoveBlockAt(Vector3i worldBlockPos)
         {
-             if (worldBlockPos.Y < 0 || worldBlockPos.Y >= Chunk.ChunkHeight) return;
+             if (worldBlockPos.Y < 0 || worldBlockPos.Y >= Chunk.ChunkHeight) return false;
 
              Vector2i chunkCoords = GetChunkCoords(new Vector3(worldBlockPos.X, worldBlockPos.Y, worldBlockPos.Z));
              if (_activeChunks.TryGetValue((chunkCoords.X, chunkCoords.Y), out var chunk))
@@ -505,7 +507,9 @@ namespace VoxelGame.World
                          MarkNeighborsDirty(worldBlockPos.X, worldBlockPos.Z, localX, localZ);
                      }
                  }
+                 return true; // Block removed successfully
              }
+             return false; // Chunk not loaded or found
         }
 
         // Adds a block at the specified world coordinates with the given state

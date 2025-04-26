@@ -160,19 +160,23 @@ namespace VoxelGame.Player
                 // --- Block Breaking Input (Left Click) ---
                 if (mouse.IsButtonDown(MouseButton.Left) && _blockBreakCooldown <= 0) 
                 {
-                    _world.RemoveBlockAt(TargetedBlockPosition.Value); // Use the stored value
-                    _blockBreakCooldown = BlockActionInterval; // Reset break cooldown
-                    _blockPlaceCooldown = BlockActionInterval; // Also reset place cooldown to prevent instant place after break
-                    TargetedBlockPosition = null; // Clear target immediately after breaking
+                    var success = _world.RemoveBlockAt(TargetedBlockPosition.Value); // Use the stored value
+                    if (success) {
+                        _blockBreakCooldown = BlockActionInterval; // Reset break cooldown
+                        _blockPlaceCooldown = BlockActionInterval; // Also reset place cooldown to prevent instant place after break
+                        TargetedBlockPosition = null; // Clear target immediately after breaking
+                    }
                 }
                 // --- Block Placing Input (Right Click) ---
                 else if (mouse.IsButtonDown(MouseButton.Right) && _blockPlaceCooldown <= 0) 
                 {
                     // Use the AddBlockFromNormalVector which uses the adjacentBlockPos from the raycast
-                    _world.AddBlockFromNormalVector(PlayerCamera, reachDistance); // Default newState is 1 (solid)
-                    _blockPlaceCooldown = BlockActionInterval; // Reset place cooldown
-                    _blockBreakCooldown = BlockActionInterval; // Also reset break cooldown
-                    // No need to clear TargetedBlockPosition here, as placement doesn't remove the target
+                    var success = _world.AddBlockFromNormalVector(PlayerCamera, reachDistance); // Default newState is 1 (solid)
+                    if (success) {
+                        _blockPlaceCooldown = BlockActionInterval; // Reset place cooldown
+                        _blockBreakCooldown = BlockActionInterval; // Also reset break cooldown
+                        // No need to clear TargetedBlockPosition here, as placement doesn't remove the target
+                    }
                 }
             }
             else
