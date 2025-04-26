@@ -1,3 +1,6 @@
+using System.IO;
+using System.Linq;
+using System.Text.Json;
 using OpenTK.Mathematics;
 using System;
 using System.Collections.Concurrent;
@@ -5,6 +8,38 @@ using System.Collections.Generic;
 
 namespace VoxelGame.World
 {
+    // --- Serialization Data Structures ---
+    // These structures are designed for easy JSON serialization/deserialization
+
+    internal class BlockEditData
+    {
+        public byte X { get; set; }
+        public byte Z { get; set; }
+        public byte State { get; set; }
+    }
+
+    internal class LayerEditData
+    {
+        public int YLevel { get; set; }
+        public List<BlockEditData> Blocks { get; set; } = new();
+    }
+
+    internal class ChunkEditData
+    {
+        public int ChunkX { get; set; }
+        public int ChunkZ { get; set; } // Changed from Y to Z for clarity, assuming Vector2i uses X,Y for horizontal plane
+        public List<LayerEditData> Layers { get; set; } = new();
+    }
+
+    internal class SaveData
+    {
+        public int WorldSeed { get; set; }
+        public List<ChunkEditData> Edits { get; set; } = new();
+    }
+
+    // --- End Serialization Data Structures ---
+
+
     /// <summary>
     /// Stores persistent edits made to a specific chunk.
     /// This class manages the storage and retrieval of block changes.
@@ -30,9 +65,10 @@ namespace VoxelGame.World
 
         /// <summary>
         /// Private constructor to ensure instances are managed via static methods.
+        /// Also used internally by LoadAllEdits.
         /// </summary>
         /// <param name="coords">The coordinates of the chunk these edits belong to.</param>
-        private ChunkEdits(Vector2i coords)
+        private ChunkEdits(Vector2i coords) // Keep private
         {
             ChunkCoords = coords;
         }
@@ -111,8 +147,138 @@ namespace VoxelGame.World
             chunk.MarkDirty();
         }
 
-        // TODO: Add methods for saving/loading _allEdits to/from a file.
-        // public static void SaveAllEdits(string filePath) { ... }
-        // public static void LoadAllEdits(string filePath) { ... }
+        private static string GetSaveFilePath()
+        {
+            string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string mcClonePath = Path.Combine(appDataPath, "McClone");
+            Directory.CreateDirectory(mcClonePath); // Ensure the directory exists
+            return Path.Combine(mcClonePath, "world_edits.json");
+        }
+
+        /// <summary>
+        /// Saves all current chunk edits and the world seed to a JSON file in the AppData directory.
+        /// </summary>
+        /// <param name="worldSeed">The seed of the world being saved.</param>
+        public static void SaveAllEdits(int worldSeed)
+        {
+            var saveData = new SaveData { WorldSeed = worldSeed };
+
+            foreach (var kvpChunk in _allEdits)
+            {
+                var chunkCoords = kvpChunk.Key;
+                var chunkEdits = kvpChunk.Value;
+
+                var chunkEditData = new ChunkEditData
+                {
+                    ChunkX = chunkCoords.Item1,
+                    ChunkZ = chunkCoords.Item2 // Assuming Item2 is Z
+                };
+
+                foreach (var kvpLayer in chunkEdits._editedLayers)
+                {
+                    var yLevel = kvpLayer.Key;
+                    var layerBlocks = kvpLayer.Value;
+
+                    var layerEditData = new LayerEditData { YLevel = yLevel };
+
+                    foreach (var kvpBlock in layerBlocks)
+                    {
+                        layerEditData.Blocks.Add(new BlockEditData
+                        {
+                            X = kvpBlock.Key.x,
+                            Z = kvpBlock.Key.z,
+                            State = kvpBlock.Value
+                        });
+                    }
+                    // Only add layer data if there are actual block edits in it
+                    if (layerEditData.Blocks.Any())
+                    {
+                        chunkEditData.Layers.Add(layerEditData);
+                    }
+                }
+                 // Only add chunk data if there are actual layer edits in it
+                if (chunkEditData.Layers.Any())
+                {
+                    saveData.Edits.Add(chunkEditData);
+                }
+            }
+
+            try
+            {
+                string filePath = GetSaveFilePath();
+                // Use minimal options for compacted JSON
+                string jsonString = JsonSerializer.Serialize(saveData, new JsonSerializerOptions { WriteIndented = false });
+                File.WriteAllText(filePath, jsonString);
+                Console.WriteLine($"World edits saved to {filePath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error saving world edits: {ex.Message}");
+                // Consider more robust error handling/logging
+            }
+        }
+
+        /// <summary>
+        /// Loads chunk edits from the JSON file in the AppData directory.
+        /// Clears existing edits before loading.
+        /// </summary>
+        /// <returns>The world seed loaded from the file, or a default value (e.g., 0) if the file doesn't exist or fails to load.</returns>
+        public static int LoadAllEdits()
+        {
+            string filePath = GetSaveFilePath();
+            int loadedSeed = 0; // Default seed if load fails
+
+            if (!File.Exists(filePath))
+            {
+                Console.WriteLine("No world edit save file found. Starting with no edits.");
+                 _allEdits.Clear(); // Ensure edits are cleared even if file doesn't exist
+                return loadedSeed; // Return default seed
+            }
+
+            try
+            {
+                string jsonString = File.ReadAllText(filePath);
+                var saveData = JsonSerializer.Deserialize<SaveData>(jsonString);
+
+                if (saveData == null)
+                {
+                     Console.WriteLine($"Error: Failed to deserialize save data from {filePath}.");
+                     _allEdits.Clear(); // Clear edits on failed deserialization
+                     return 0; // Return default seed
+                }
+
+                loadedSeed = saveData.WorldSeed;
+                _allEdits.Clear(); // Clear current edits before loading
+
+                foreach (var chunkEditData in saveData.Edits)
+                {
+                    var chunkCoords = new Vector2i(chunkEditData.ChunkX, chunkEditData.ChunkZ);
+                    // Use GetOrAdd pattern to handle potential concurrency, though Load should ideally happen before world gen starts
+                     var chunkEdits = _allEdits.GetOrAdd((chunkCoords.X, chunkCoords.Y), _ => new ChunkEdits(chunkCoords));
+
+
+                    foreach (var layerEditData in chunkEditData.Layers)
+                    {
+                        var layerEdits = chunkEdits._editedLayers.GetOrAdd(layerEditData.YLevel, _ => new ConcurrentDictionary<(byte x, byte z), byte>());
+
+                        foreach (var blockEditData in layerEditData.Blocks)
+                        {
+                            layerEdits[(blockEditData.X, blockEditData.Z)] = blockEditData.State;
+                        }
+                    }
+                }
+                Console.WriteLine($"World edits loaded successfully from {filePath}. World Seed: {loadedSeed}");
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading world edits from {filePath}: {ex.Message}");
+                 _allEdits.Clear(); // Clear edits on exception
+                loadedSeed = 0; // Reset seed to default on error
+                // Consider more robust error handling/logging
+            }
+
+            return loadedSeed;
+        }
     }
 }

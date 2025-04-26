@@ -7,7 +7,7 @@ using System;
 using System.IO; // Added for Path.Combine and AppContext
 using System.Threading; // For Thread.Sleep
 using VoxelGame.Rendering;
-using VoxelGame.World;
+using VoxelGame.World; // Ensure World namespace is included for ChunkEdits
 using VoxelGame.Player;
 using VoxelGame.Audio; // Add Audio namespace
 
@@ -30,6 +30,7 @@ namespace VoxelGame.Core
         // Flag to indicate initial chunk loading is complete
         private bool _initialLoadComplete = false;
         private Vector3 _initialPlayerPosition; // Store calculated start position
+        private int _worldSeed; // Store the world seed
 
         public Game(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings)
             : base(gameWindowSettings, nativeWindowSettings)
@@ -80,9 +81,21 @@ namespace VoxelGame.Core
             _blockTexture = new Texture(texturePath);
             CheckGLError("After Texture Load");
 
+            // --- Load World Edits & Determine Seed ---
+            _worldSeed = ChunkEdits.LoadAllEdits(); // Load edits first, get seed
+            if (_worldSeed == 0) // If loading failed or no file, use a default/random seed
+            {
+                _worldSeed = new Random().Next(); // Or use a fixed default like 12345
+                Console.WriteLine($"No saved seed found or load failed. Using new seed: {_worldSeed}");
+            }
+            else
+            {
+                Console.WriteLine($"Loaded world seed: {_worldSeed}");
+            }
+
             // --- World and Managers Initialization ---
             _collisionManager = new CollisionManager();
-            _world = new World.World();
+            _world = new World.World(_worldSeed); // Pass the determined seed to the World
             _world.Initialize(); // Initializes world structure, cube data, starts background task
             CheckGLError("After World Init");
 
@@ -145,6 +158,11 @@ namespace VoxelGame.Core
                     Console.WriteLine("Initial chunk load complete! Starting game.");
                     _initialLoadComplete = true;
 
+                    // Apply loaded edits AFTER initial chunks are generated but BEFORE game starts
+                    // Note: Chunk.GenerateTerrain now applies edits internally if they exist
+                    // We might still need a way to trigger rebuilds if edits were loaded *after* initial gen?
+                    // For now, assuming GenerateTerrain handles applying loaded edits correctly.
+
                     _player.Position = _initialPlayerPosition;
                     _player.PlayerCamera.Position = _initialPlayerPosition;
                     _player.UpdateAspectRatio(Size.X / (float)Size.Y);
@@ -157,10 +175,12 @@ namespace VoxelGame.Core
                 }
                 else
                 {
-                    return;
+                    // Still loading...
+                    return; // Skip the rest of the update
                 }
             }
 
+            // --- Game Logic (only runs after initial load) ---
             if (!IsFocused) return;
 
             var input = KeyboardState;
@@ -189,6 +209,7 @@ namespace VoxelGame.Core
             }
 
             _world.Update(_player.Position);
+            CheckGLError("UpdateFrame World Update");
         }
 
         protected override void OnResize(ResizeEventArgs e)
@@ -217,6 +238,16 @@ namespace VoxelGame.Core
         protected override void OnUnload()
         {
             Console.WriteLine("Starting OnUnload...");
+
+            // --- Save World Edits ---
+            if (_world != null)
+            {
+                ChunkEdits.SaveAllEdits(_world.WorldSeed); // Save edits using the world's seed
+            }
+            else
+            {
+                Console.WriteLine("Warning: World object was null during OnUnload, cannot save edits.");
+            }
 
             // --- World and Managers Cleanup ---
             _world?.Dispose();

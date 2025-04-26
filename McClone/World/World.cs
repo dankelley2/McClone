@@ -6,13 +6,13 @@ using System.Collections.Concurrent; // Add for concurrent collections
 using System.Threading;             // Add for CancellationTokenSource
 using System.Threading.Tasks;        // Add for Task
 using VoxelGame.Rendering;
-using VoxelGame.World;
+using VoxelGame.World; // Keep this
 
 namespace VoxelGame.World
 {
     public class World : IDisposable
     {
-        private readonly WorldGeneration _worldGen = new();
+        private readonly WorldGeneration _worldGen; // Remove initialization here
         private readonly FogSettings _fogSettings = new();
 
         // Chunk Management
@@ -26,9 +26,12 @@ namespace VoxelGame.World
         private CancellationTokenSource _cancellationSource = new();
         private Task _generationTask = null!;
 
-        public World()
+        // Expose the world seed used by the generator
+        public int WorldSeed => _worldGen.NoiseModule.Seed;
+
+        public World(int seed) // Add seed parameter to constructor
         {
-            // Remove _worldGen.SetSeed(5); - Seed is handled in WorldGeneration constructor
+             _worldGen = new WorldGeneration(seed); // Initialize WorldGeneration with the seed
         }
 
         public void Initialize()
@@ -37,8 +40,7 @@ namespace VoxelGame.World
             CubeData.GenerateVertices(); // Generate the template cube vertices once using static class
             WorldUtils.CheckGLError("World.Initialize CubeData");
 
-            // TODO: Load ChunkEdits from file here if implementing persistence
-            // ChunkEdits.LoadAllEdits("world_edits.dat"); // Example
+            // Loading is now handled in Game.OnLoad before World is constructed
 
             // Start the background generation task
             _generationTask = Task.Run(() => ProcessGenerationQueue(_cancellationSource.Token), _cancellationSource.Token);
@@ -343,7 +345,7 @@ namespace VoxelGame.World
         }
 
         public void Dispose()
-        {
+        {   
             Console.WriteLine("Disposing World...");
 
             // Signal cancellation to the background task
@@ -370,8 +372,7 @@ namespace VoxelGame.World
                  Console.WriteLine($"Error waiting for generation task: {ex.Message}");
             }
 
-            // TODO: Save ChunkEdits to file here if implementing persistence
-            // ChunkEdits.SaveAllEdits("world_edits.dat"); // Example
+            // Saving is now handled in Game.OnUnload before World is disposed
 
 
             // Dispose remaining chunks (must be on main thread for GL calls)
