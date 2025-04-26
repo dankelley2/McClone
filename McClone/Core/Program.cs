@@ -26,10 +26,14 @@ namespace VoxelGame.Core
             // Console.WriteLine("==> Set WindowHintBool.ScaleFramebuffer hint to TRUE");
 
             // --- Configure for Fullscreen ---
+            // Get the primary monitor
+            var primaryMonitor = Monitors.GetPrimaryMonitor();
+            var resolution = primaryMonitor.ClientArea.Size; // Use ClientArea for full resolution
+
             var nativeWindowSettings = new NativeWindowSettings()
             {
-                // Size might be ignored in exclusive fullscreen, but set it reasonably
-                ClientSize = new Vector2i(1280, 720), // Or desired resolution
+                // Use the monitor's resolution
+                ClientSize = resolution,
                 Title = "OpenTK Voxel Game (Fullscreen)",
                 APIVersion = new Version(3, 3),
                 Flags = ContextFlags.ForwardCompatible,
@@ -37,10 +41,10 @@ namespace VoxelGame.Core
                 // Set the window state to Fullscreen
                 WindowState = WindowState.Fullscreen,
 
-                // Optional: Specify the primary monitor explicitly
-                // CurrentMonitor = Monitors.GetPrimaryMonitor().Handle // Requires reference to Monitors class
+                // Explicitly set the monitor for fullscreen
+                CurrentMonitor = primaryMonitor.Handle
             };
-            Console.WriteLine($"==> Attempting to start in {nativeWindowSettings.WindowState} mode.");
+            Console.WriteLine($"==> Attempting to start in {nativeWindowSettings.WindowState} mode at {resolution.X}x{resolution.Y}.");
             // --- End Fullscreen Configuration ---
 
 

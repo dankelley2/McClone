@@ -13,7 +13,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NAudio.Vorbis" Version="1.4.0" />
     <PackageReference Include="OpenTK" Version="4.9.4" />
     <PackageReference Include="SharpNoise" Version="0.12.1.1" />
     <PackageReference Include="StbImageSharp" Version="2.30.15" />

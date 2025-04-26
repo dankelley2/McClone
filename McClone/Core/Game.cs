@@ -22,9 +22,6 @@ namespace VoxelGame.Core
         private World.World _world = null!;
         private Player.Player _player = null!;
         private CollisionManager _collisionManager = null!;
-        private AudioManager? _audioManager = null; // Make AudioManager nullable
-        private int _backgroundMusicBuffer = -1; // Store buffer handle for music
-        private int _backgroundMusicSource = -1; // Store source handle for music
 
         // Input state variables
         private bool _firstMove = true;
@@ -53,21 +50,6 @@ namespace VoxelGame.Core
         {
             base.OnLoad();
             Console.WriteLine("OpenGL Version: " + GL.GetString(StringName.Version));
-
-            // --- Initialize Audio ---
-            try
-            {
-                _audioManager = new AudioManager();
-                CheckGLError("After AudioManager Init"); // Check GL error *after* potential AL errors
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"!!!!!!!! Failed to initialize AudioManager: {ex.Message} !!!!!!!!!");
-                // Optionally close the game or continue without audio
-                // Close();
-                // return;
-            }
-
 
             // --- GLFW Framebuffer Size ---
             unsafe
@@ -121,19 +103,6 @@ namespace VoxelGame.Core
 
             // --- Queue Initial Chunks ---
             _world.QueueInitialChunks(_initialPlayerPosition);
-
-            // --- Load Sounds ---
-            if (_audioManager != null)
-            {
-                string musicPath = Path.Combine(AppContext.BaseDirectory,"Assets", "Audio", "Key.ogg"); // Use AppContext.BaseDirectory
-                _backgroundMusicBuffer = _audioManager.LoadSound(musicPath);
-                if (_backgroundMusicBuffer == -1)
-                {
-                     Console.WriteLine($"Warning: Could not load background music from {musicPath}");
-                }
-            }
-
-
             Console.WriteLine("OnLoad Complete. Initial chunk loading initiated.");
         }
 
@@ -183,19 +152,6 @@ namespace VoxelGame.Core
                     CursorState = CursorState.Grabbed;
                     _firstMove = true;
                     _lastMousePos = new Vector2(MouseState.X, MouseState.Y);
-
-                    // --- Start Background Music ---
-                    if (_audioManager != null && _backgroundMusicBuffer != -1 && _backgroundMusicSource == -1)
-                    {
-                        _backgroundMusicSource = _audioManager.PlaySound(_backgroundMusicBuffer, loop: true, gain: 0.5f); // Play looped at 50% volume
-                        if (_backgroundMusicSource == -1)
-                        {
-                            Console.WriteLine("Warning: Failed to play background music.");
-                        } else {
-                            Console.WriteLine($"Started background music (Source ID: {_backgroundMusicSource})");
-                        }
-                    }
-
 
                     CheckGLError("After Initial Load Completion");
                 }
@@ -261,19 +217,6 @@ namespace VoxelGame.Core
         protected override void OnUnload()
         {
             Console.WriteLine("Starting OnUnload...");
-
-            // --- Stop and Clean Up Audio ---
-            if (_audioManager != null)
-            {
-                if (_backgroundMusicSource != -1)
-                {
-                    _audioManager.StopSound(_backgroundMusicSource);
-                    _backgroundMusicSource = -1; // Reset source handle
-                }
-                _audioManager.Dispose(); // Dispose AudioManager (stops sources, deletes buffers, cleans up OpenAL)
-                _audioManager = null; // Assigning null is now allowed
-            }
-
 
             // --- World and Managers Cleanup ---
             _world?.Dispose();
