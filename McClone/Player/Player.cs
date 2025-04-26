@@ -21,8 +21,9 @@ namespace VoxelGame.Player
         private bool _isGrounded;
         private CollisionManager _collisionManager;
         private World.World _world;
-        private float _blockBreakCooldown = 0.0f; // Cooldown timer
-        private const float BlockBreakInterval = 0.1f; // Time between block breaks
+        private float _blockBreakCooldown = 0.0f; // Cooldown timer for breaking
+        private float _blockPlaceCooldown = 0.0f; // Cooldown timer for placing
+        private const float BlockActionInterval = 0.2f; // Time between block actions (break or place)
 
         public Player(Vector3 startPosition, float aspectRatio, CollisionManager collisionManager, World.World world)
         {
@@ -135,25 +136,43 @@ namespace VoxelGame.Player
                 PlayerCamera.ProcessMouseMovement(deltaX, deltaY);
             }
 
-            // Update cooldown timer
+            // Update cooldown timers
             if (_blockBreakCooldown > 0)
             {
                 _blockBreakCooldown -= dt;
             }
+            if (_blockPlaceCooldown > 0)
+            {
+                _blockPlaceCooldown -= dt;
+            }
 
-            // --- Block Targeting Raycast (for highlighting) ---
+            // --- Block Targeting Raycast (for highlighting and actions) ---
             // Use the *updated* camera position and direction for the raycast
-            if (_world.Raycast(PlayerCamera.Position, PlayerCamera.Front, 100.0f, out Vector3 hitBlockPos, out _)) // 100.0f is reach distance
+            // Increased reach slightly for placement consistency
+            const float reachDistance = 5.0f; 
+            bool isTargetingBlock = _world.Raycast(PlayerCamera.Position, PlayerCamera.Front, reachDistance, out Vector3 hitBlockPos, out Vector3 adjacentBlockPos);
+
+            if (isTargetingBlock)
             {
                 // Store the integer coords of the hit block for highlighting
                 TargetedBlockPosition = new Vector3i((int)Math.Floor(hitBlockPos.X), (int)Math.Floor(hitBlockPos.Y), (int)Math.Floor(hitBlockPos.Z));
 
-                // --- Block Breaking Input (only if targeting a block) ---
-                if (mouse.IsButtonDown(MouseButton.Left) && _blockBreakCooldown <= 0) // Left click to break
+                // --- Block Breaking Input (Left Click) ---
+                if (mouse.IsButtonDown(MouseButton.Left) && _blockBreakCooldown <= 0) 
                 {
                     _world.RemoveBlockAt(TargetedBlockPosition.Value); // Use the stored value
-                    _blockBreakCooldown = BlockBreakInterval; // Reset cooldown
-                    TargetedBlockPosition = null; // Clear target immediately after breaking to avoid re-highlighting instantly
+                    _blockBreakCooldown = BlockActionInterval; // Reset break cooldown
+                    _blockPlaceCooldown = BlockActionInterval; // Also reset place cooldown to prevent instant place after break
+                    TargetedBlockPosition = null; // Clear target immediately after breaking
+                }
+                // --- Block Placing Input (Right Click) ---
+                else if (mouse.IsButtonDown(MouseButton.Right) && _blockPlaceCooldown <= 0) 
+                {
+                    // Use the AddBlockFromNormalVector which uses the adjacentBlockPos from the raycast
+                    _world.AddBlockFromNormalVector(PlayerCamera, reachDistance); // Default newState is 1 (solid)
+                    _blockPlaceCooldown = BlockActionInterval; // Reset place cooldown
+                    _blockBreakCooldown = BlockActionInterval; // Also reset break cooldown
+                    // No need to clear TargetedBlockPosition here, as placement doesn't remove the target
                 }
             }
             else

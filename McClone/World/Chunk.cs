@@ -79,6 +79,7 @@ namespace VoxelGame.World
 
             try
             {
+                // --- Base Terrain Generation ---
                 for (int y = 0; y < ChunkHeight; y++)
                     _layers[y] = null;
 
@@ -91,22 +92,25 @@ namespace VoxelGame.World
                         byte height = (byte)Math.Max(byte.MinValue, Math.Min(byte.MaxValue, WorldGeneration.BaseHeight + Math.Round((noiseValue + 1.0) / 2.0 * WorldGeneration.TerrainAmplitude)));
 
                         for (byte y = (byte)(WorldGeneration.BaseHeight - 1); y <= height && y < ChunkHeight; y++){
-                            byte[,]? currentLayer = _layers[y]; // Assign to nullable local var
-                            if (currentLayer == null)
-                            {
-                                currentLayer = new byte[ChunkSize, ChunkSize];
-                                _layers[y] = currentLayer; // Assign back to the array
-                            }
-                            // Now the compiler knows currentLayer is not null here
-                            currentLayer[x, z] = 1; // 1 = solid voxel
+                            // Use internal setter to handle layer creation
+                            SetLocalVoxelStateInternal((byte)x, y, (byte)z, 1); // 1 = solid voxel
                         }
                     }
                 }
+
+                // --- Apply Persistent Edits ---
+                ChunkEdits? edits = ChunkEdits.GetEdits(this.ChunkCoords);
+                if (edits != null)
+                {
+                    edits.ApplyToChunk(this);
+                    // ApplyToChunk already marks the chunk dirty if edits were applied
+                }
+
             }
             finally // Ensure flags are reset even if an error occurs
             {
                 // No lock needed for volatile writes if atomicity isn't required across multiple fields
-                _isDirty = true; // Mark for buffer update (main thread will handle)
+                _isDirty = true; // Mark for buffer update (main thread will handle) - ApplyToChunk might also set this
                 _isGenerating = false;
                 _isInitialized = true; // Mark as generated
             }
@@ -118,6 +122,52 @@ namespace VoxelGame.World
             byte z = (byte)(index / ChunkSize);
             return new(x, z);
         }
+
+        // Internal method to set voxel state, handles layer creation. Used by GenerateTerrain and ChunkEdits.ApplyToChunk
+        internal void SetLocalVoxelStateInternal(byte x, int y, byte z, byte state)
+        {
+            // Bounds check (redundant if called carefully, but safe)
+            if (y < 0 || y >= ChunkHeight || x >= ChunkSize || z >= ChunkSize)
+            {
+                return;
+            }
+
+            // Get or create the layer
+            byte[,]? currentLayer = _layers[y];
+            if (currentLayer == null)
+            {
+                // Only create a new layer if the state is non-air
+                if (state != 0)
+                {
+                    currentLayer = new byte[ChunkSize, ChunkSize];
+                    _layers[y] = currentLayer;
+                }
+                else
+                {
+                    // Trying to set air in a non-existent (implicitly air) layer, do nothing
+                    return;
+                }
+            }
+
+            // Set the state
+            currentLayer[x, z] = state;
+
+            // Optional: Check if layer becomes empty after setting state to 0
+            if (state == 0)
+            {
+                bool layerEmpty = true;
+                for (int checkX = 0; checkX < ChunkSize; checkX++)
+                {
+                    for (int checkZ = 0; checkZ < ChunkSize; checkZ++)
+                    {
+                        if (currentLayer[checkX, checkZ] != 0) { layerEmpty = false; break; }
+                    }
+                    if (!layerEmpty) break;
+                }
+                if (layerEmpty) _layers[y] = null; // Deallocate empty layer
+            }
+        }
+
 
         // Public method to get the state of a voxel at local coordinates
         // Returns 0 for air/out-of-bounds, >0 for solid types
@@ -222,26 +272,52 @@ namespace VoxelGame.World
 
             // Check if the layer exists and the block is actually solid
             var layer = _layers[y];
-            if (layer != null && layer[x, z] != 0)
+            byte previousState = layer?[x, z] ?? 0; // Get previous state (0 if layer is null)
+
+            if (previousState != 0) // Only proceed if it was a solid block
             {
-                layer[x, z] = 0; // Set to air
+                // Use internal setter to handle potential layer deallocation
+                SetLocalVoxelStateInternal(x, y, z, 0); // Set to air
+
+                // Record the edit persistently
+                ChunkEdits.RecordEdit(this.ChunkCoords, y, x, z, 0); // Record setting to air
+
                 _isDirty = true; // Mark chunk for mesh regeneration
-
-                // Optional: Check if layer is now empty and set _layers[y] = null
-                // This adds complexity but saves memory if layers become fully empty.
-                bool layerEmpty = true;
-                for (int checkX = 0; checkX < ChunkSize; checkX++){
-                    for (int checkZ = 0; checkZ < ChunkSize; checkZ++){
-                        if(layer[checkX, checkZ] != 0) { layerEmpty = false; break; }
-                    }
-                    if (!layerEmpty) break;
-                }
-                if (layerEmpty) _layers[y] = null;
-
-                // TODO: Consider notifying neighboring chunks if the removed block was on a border
-                // This would require accessing the World object and marking neighbors as dirty.
             }
             // If layer is null or block is already 0, do nothing.
+        }
+
+        // Adds a block at the specified local chunk coordinates with the given state
+        public void AddBlock(byte x, byte y, byte z, byte newState)
+        {
+            // Check bounds
+            if (y >= ChunkHeight || x >= ChunkSize || z >= ChunkSize)
+            {
+                Console.WriteLine($"Warning: Attempted to add block outside chunk bounds at ({x},{y},{z})");
+                return;
+            }
+
+            // Check if trying to add air (which is effectively removal)
+            if (newState == 0)
+            {
+                RemoveBlock(x, y, z); // Delegate to RemoveBlock logic
+                return;
+            }
+
+            // Check if a block already exists here
+            byte previousState = GetLocalVoxelState(x, y, z);
+
+            if (previousState != newState) // Only proceed if the state is actually changing
+            {
+                // Use internal setter to handle layer creation/update
+                SetLocalVoxelStateInternal(x, y, z, newState);
+
+                // Record the edit persistently
+                ChunkEdits.RecordEdit(this.ChunkCoords, y, x, z, newState);
+
+                _isDirty = true; // Mark chunk for mesh regeneration
+            }
+            // If the block state is already the desired newState, do nothing.
         }
 
         // Generates vertex data based on current voxel state (Thread Safe)

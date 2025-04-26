@@ -19,7 +19,7 @@ namespace VoxelGame.World
         private ConcurrentDictionary<(int, int), Chunk> _activeChunks = new(); // Thread-safe dictionary
         private BlockingCollection<(int, int)> _generationQueue = new(new ConcurrentQueue<(int, int)>()); // Queue for coords needing generation or mesh rebuild
         private ConcurrentQueue<Chunk> _buildQueue = new(); // Queue for chunks ready for GL buffer updates (on main thread)
-        private const int RenderDistance = 8;
+        private const int RenderDistance = 2;
         private const int LoadDistance = RenderDistance + 2; // Load distance slightly larger to preload
 
         // Background Task Management
@@ -36,6 +36,9 @@ namespace VoxelGame.World
             Console.WriteLine("Initializing World...");
             CubeData.GenerateVertices(); // Generate the template cube vertices once using static class
             WorldUtils.CheckGLError("World.Initialize CubeData");
+
+            // TODO: Load ChunkEdits from file here if implementing persistence
+            // ChunkEdits.LoadAllEdits("world_edits.dat"); // Example
 
             // Start the background generation task
             _generationTask = Task.Run(() => ProcessGenerationQueue(_cancellationSource.Token), _cancellationSource.Token);
@@ -367,6 +370,9 @@ namespace VoxelGame.World
                  Console.WriteLine($"Error waiting for generation task: {ex.Message}");
             }
 
+            // TODO: Save ChunkEdits to file here if implementing persistence
+            // ChunkEdits.SaveAllEdits("world_edits.dat"); // Example
+
 
             // Dispose remaining chunks (must be on main thread for GL calls)
             foreach (var chunk in _activeChunks.Values)
@@ -418,6 +424,21 @@ namespace VoxelGame.World
             return false; // No hit within maxDistance
         }
 
+        // Performs a raycast from the camera and adds a block adjacent to the hit face.
+        public void AddBlockFromNormalVector(Camera camera, float maxDistance, byte newState = 1)
+        {
+            if (newState == 0) return; // Cannot add air this way
+
+            bool hit = Raycast(camera.Position, camera.Front, maxDistance, out _, out Vector3 adjacentBlockPos);
+
+            if (hit)
+            {
+                // Convert adjacent position to integer coordinates for block placement
+                Vector3i placePos = new Vector3i((int)Math.Floor(adjacentBlockPos.X), (int)Math.Floor(adjacentBlockPos.Y), (int)Math.Floor(adjacentBlockPos.Z));
+                AddBlockAt(placePos, newState);
+            }
+        }
+
         // Gets the state of a block at world coordinates
         public byte GetBlockState(int worldX, int worldY, int worldZ)
         {
@@ -456,11 +477,13 @@ namespace VoxelGame.World
                  if (worldBlockPos.X >= chunk.WorldOffset.X && worldBlockPos.X < chunk.WorldOffset.X + Chunk.ChunkSize &&
                      worldBlockPos.Z >= chunk.WorldOffset.Z && worldBlockPos.Z < chunk.WorldOffset.Z + Chunk.ChunkSize)
                  {
-                     // Store previous state before removing
-                     byte previousState = chunk.GetLocalVoxelState(localX, worldBlockPos.Y, localZ);
-                     if (previousState != 0) // Only proceed if it was a solid block
+                     // Call Chunk.RemoveBlock - it now handles internal state and recording the edit
+                     chunk.RemoveBlock((byte)localX, (byte)worldBlockPos.Y, (byte)localZ);
+
+                     // If the chunk became dirty (which RemoveBlock ensures if a change occurred),
+                     // queue it and its neighbors for rebuild.
+                     if (chunk.IsDirty)
                      {
-                         chunk.RemoveBlock((byte)localX, (byte)worldBlockPos.Y, (byte)localZ);
                          // Add coordinates to background queue to trigger mesh data regeneration
                          _generationQueue.Add((chunkCoords.X, chunkCoords.Y));
                          // Console.WriteLine($"Queued chunk {chunkCoords} for rebuild after block removal.");
@@ -470,6 +493,47 @@ namespace VoxelGame.World
                      }
                  }
              }
+        }
+
+        // Adds a block at the specified world coordinates with the given state
+        public void AddBlockAt(Vector3i worldBlockPos, byte newState)
+        {
+            // Basic bounds check
+            if (worldBlockPos.Y < 0 || worldBlockPos.Y >= Chunk.ChunkHeight) return;
+            // Don't allow adding air this way, use RemoveBlockAt
+            if (newState == 0) return;
+
+            Vector2i chunkCoords = GetChunkCoords(new Vector3(worldBlockPos.X, worldBlockPos.Y, worldBlockPos.Z));
+            if (_activeChunks.TryGetValue((chunkCoords.X, chunkCoords.Y), out var chunk))
+            {
+                int localX = worldBlockPos.X - chunk.WorldOffset.X;
+                int localZ = worldBlockPos.Z - chunk.WorldOffset.Z;
+                // Ensure local coordinates are within the chunk bounds (0 to ChunkSize-1)
+                localX = (localX % Chunk.ChunkSize + Chunk.ChunkSize) % Chunk.ChunkSize;
+                localZ = (localZ % Chunk.ChunkSize + Chunk.ChunkSize) % Chunk.ChunkSize;
+
+                // Check if the block is actually within this chunk's horizontal bounds after modulo
+                if (worldBlockPos.X >= chunk.WorldOffset.X && worldBlockPos.X < chunk.WorldOffset.X + Chunk.ChunkSize &&
+                    worldBlockPos.Z >= chunk.WorldOffset.Z && worldBlockPos.Z < chunk.WorldOffset.Z + Chunk.ChunkSize)
+                {
+                    // Call Chunk.AddBlock - it handles internal state and recording the edit
+                    chunk.AddBlock((byte)localX, (byte)worldBlockPos.Y, (byte)localZ, newState);
+
+                    // If the chunk became dirty (which AddBlock ensures if a change occurred),
+                    // queue it and its neighbors for rebuild.
+                    if (chunk.IsDirty)
+                    {
+                        // Add coordinates to background queue to trigger mesh data regeneration
+                        _generationQueue.Add((chunkCoords.X, chunkCoords.Y));
+                        // Console.WriteLine($"Queued chunk {chunkCoords} for rebuild after block placement.");
+
+                        // Mark neighbors dirty if block was placed on a border
+                        MarkNeighborsDirty(worldBlockPos.X, worldBlockPos.Z, localX, localZ);
+                    }
+                }
+            }
+            // If chunk doesn't exist, we can't add a block to it yet.
+            // Future enhancement: Queue placement if chunk is pending generation?
         }
 
         // Helper to mark neighboring chunks dirty if a block is modified on a border
