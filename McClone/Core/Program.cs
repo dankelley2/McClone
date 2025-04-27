@@ -51,7 +51,7 @@ namespace VoxelGame.Core
             using (var game = new Game(GameWindowSettings.Default, nativeWindowSettings))
             {
                 // Setting UpdateFrequency is fine
-                game.UpdateFrequency = 60.0;
+                game.UpdateFrequency = 120.0;
                 // RenderFrequency is often determined by VSync in fullscreen
 
                 game.Run();
