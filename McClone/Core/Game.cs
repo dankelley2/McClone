@@ -193,9 +193,12 @@ namespace VoxelGame.Core
             GL.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusSrcAlpha); // Pre-multiplied alpha
 
             Matrix4 uiProjection = Matrix4.CreateOrthographicOffCenter(0, Size.X, Size.Y, 0, -1.0f, 1.0f);
-            _ui.DrawRectangle(new Vector2(10, 10), new Vector2(210, 60), new Color4(0.0f, 0.0f, 0.0f, 0.5f), uiProjection);
+            // Increase height of the rectangle to fit the new text line
+            _ui.DrawRectangle(new Vector2(10, 10), new Vector2(210, 85), new Color4(0.0f, 0.0f, 0.0f, 0.5f), uiProjection);
             _ui.DrawText($"World Seed: {_world.WorldSeed}", new Vector2(15, 20), 16f, OpenTK.Mathematics.Color4.White, uiProjection);
             _ui.DrawText($"FPS: {1.0 / e.Time:F0}", new Vector2(15, 45), 16f, OpenTK.Mathematics.Color4.Yellow, uiProjection);
+            // Add player coordinates text
+            _ui.DrawText($"XYZ: {_player.Position.X:F1} / {_player.Position.Y:F1} / {_player.Position.Z:F1}", new Vector2(15, 70), 16f, OpenTK.Mathematics.Color4.White, uiProjection);
             CheckGLError("RenderFrame UI Draw");
             GL.Enable(EnableCap.DepthTest); // Re-enable depth test if needed later
         }

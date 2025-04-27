@@ -7,7 +7,7 @@ namespace VoxelGame.World
         public Perlin NoiseModule { get; }
         public const float NoiseScale = 0.03f;
         public const int NoiseOctaves = 6;
-        public const float TerrainAmplitude = 15f;
+        public const float TerrainAmplitude = 18f;
         public const int BaseHeight = 50;
         public const int WaterLevel = 55; // Define the water level
 
@@ -18,7 +18,7 @@ namespace VoxelGame.World
                 Seed = seed,
                 OctaveCount = NoiseOctaves,
                 Persistence = 0.5,
-                Lacunarity = 2.0
+                Lacunarity = 1.5
             };
         }
 
