@@ -18,7 +18,7 @@ namespace VoxelGame.World
                 Seed = seed,
                 OctaveCount = NoiseOctaves,
                 Persistence = 0.5,
-                Lacunarity = 1.5
+                Lacunarity = 1.7
             };
         }
 
