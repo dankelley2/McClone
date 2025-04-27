@@ -8,6 +8,7 @@ A simple Minecraft-inspired voxel game clone built with C# and OpenTK. Below sce
 ## Features
 
 - **Procedural Terrain Generation**: Uses Perlin noise (SharpNoise) for infinite, varied terrain.
+- **MultiThreaded**: Background thread used for terrain vertex generation to reduce frame rate drops.
 - **Chunk System**: World is divided into 16x128x16 chunks for efficient rendering and memory use.
 - **Block Rendering**: Only exposed faces of blocks are rendered for performance.
 - **Textured Blocks**: Uses OpenGL shaders and texture atlases for block appearance (e.g., grass block).
