@@ -192,6 +192,8 @@ namespace VoxelGame.Core
         {
             base.OnUpdateFrame(e);
             float dt = (float)e.Time;
+            // Clamp delta time to prevent physics issues with large frame drops
+            dt = Math.Min(dt, 1.0f / 30.0f); // Max dt = 1/30th of a second
 
             // --- Initial Chunk Loading Check ---
             if (!_initialLoadComplete)
