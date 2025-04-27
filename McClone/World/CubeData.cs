@@ -5,7 +5,7 @@ namespace VoxelGame.World
 {
     public static class CubeData
     {
-        // Stride is 11: 3 Pos, 3 Normal, 2 TexCoord
+        // Stride is 8: 3 Pos, 3 Normal, 2 TexCoord
         public const int VertexStride = 8;
         public static float[] Vertices { get; private set; } = null!;
         public static int VertexCount { get; private set; } = 0;
