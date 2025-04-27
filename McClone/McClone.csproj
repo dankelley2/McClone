@@ -19,16 +19,19 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Shaders\shader.vert">
+    <None Update="Assets\Shaders\**\*">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Shaders\shader.frag">
+    <None Update="Assets\Textures\**\*">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Textures\**\*">
+    <None Update="Assets\Audio\**\*.wav">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Assets\Audio\**\*.ogg">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-  
+
 </Project>
 
