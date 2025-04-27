@@ -12,9 +12,9 @@ namespace VoxelGame.World
 
         public static void GenerateVertices()
         {
-            float uMinTop = 0.25f, uMaxTop = 0.5f, vMinTop = 0.666f, vMaxTop = 1.0f;
-            float uMinSide = 0.25f, uMaxSide = 0.5f, vMinSide = 0.333f, vMaxSide = 0.666f;
-            float uMinBottom = 0.25f, uMaxBottom = 0.5f, vMinBottom = 0.0f, vMaxBottom = 0.333f;
+            float uMinTop = 0f, uMaxTop = 1f, vMinTop = 0.666f, vMaxTop = 1.0f;
+            float uMinSide = 0f, uMaxSide = 1f, vMinSide = 0.333f, vMaxSide = 0.666f;
+            float uMinBottom = 0f, uMaxBottom = 1f, vMinBottom = 0.0f, vMaxBottom = 0.333f;
 
             // OpenGL UV origin (0,0) is bottom-left. Adjust if texture appears flipped.
             // If textures are upside down, you might need to swap vMin/vMax or uncomment

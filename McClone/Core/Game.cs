@@ -92,7 +92,7 @@ namespace VoxelGame.Core
 
             // --- Texture Loading ---
             // Assuming you have a "grass_block.png" in a "Textures" folder next to your executable
-            string texturePath = Path.Combine(baseDirectory, "Assets", "Textures", "grass_block.png"); // Use baseDirectory
+            string texturePath = Path.Combine(baseDirectory, "Assets", "Textures", "grass-block.png"); // Use baseDirectory
             _blockTexture = new Texture(texturePath);
             CheckGLError("After Texture Load");
 
