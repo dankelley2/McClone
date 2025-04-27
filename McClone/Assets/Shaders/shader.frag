@@ -49,8 +49,23 @@ void main()
     float fogFactor = exp(-pow(dist * fogDensity, fogGradient));
     fogFactor = clamp(fogFactor, 0.0, 1.0);
 
-    // --- Final Color (Mix base color with fog color) ---
+    // --- Base Final Color (Mix base color with fog color) ---
     vec3 finalColor = mix(fogColor, baseColor, fogFactor);
+
+    // --- Water Effect ---
+    float waterLevel = 55.0;
+    vec3 waterColor = vec3(0.1, 0.3, 0.8); // A blueish water color
+    float waterBlendFactor = 0.6; // How much water color to blend in
+
+    if (FragPos.y < waterLevel) {
+        // Blend the current final color with the water color
+        finalColor = mix(finalColor, waterColor, waterBlendFactor);
+
+        // Optional: Make it slightly darker the deeper it is (simple depth effect)
+        float depthFactor = clamp((waterLevel - FragPos.y) / 10.0, 0.0, 0.5); // Darken over 10 units depth, max 50% darker
+        finalColor *= (1.0 - depthFactor);
+    }
+
 
     FragColor = vec4(finalColor, 1.0); // Use texture alpha if needed: texColor.a
 }

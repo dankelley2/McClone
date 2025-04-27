@@ -9,6 +9,7 @@ namespace VoxelGame.World
         public const int NoiseOctaves = 6;
         public const float TerrainAmplitude = 15f;
         public const int BaseHeight = 50;
+        public const int WaterLevel = 55; // Define the water level
 
         public WorldGeneration(int seed = 5)
         {

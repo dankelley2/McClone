@@ -329,6 +329,7 @@ namespace VoxelGame.World
             float[] cubeVertices = CubeData.Vertices; // Static data, safe
             int vertexStride = CubeData.VertexStride; // Static data, safe
 
+            // --- Generate Terrain Mesh ---
             for (byte y = 0; y < ChunkHeight; y++)
             {
                 var layer = _layers[y]; // layer is now potentially null
@@ -338,8 +339,9 @@ namespace VoxelGame.World
                 {
                     for (byte z = 0; z < ChunkSize; z++)
                     {
-                        if (layer[x, z] == 0) continue;
+                        if (layer[x, z] == 0) continue; // Skip air blocks
 
+                        // Only generate mesh for solid blocks
                         var exposedFaces = GetExposedFaces(x, y, z);
                         if (exposedFaces.Count > 0)
                         {
@@ -348,6 +350,52 @@ namespace VoxelGame.World
                     }
                 }
             }
+
+            // --- Generate Water Surface Mesh ---
+            const int waterY = WorldGeneration.WaterLevel - 1; // Water level is 1 block below the surface
+            if (waterY >= 0 && waterY < ChunkHeight) // Ensure water level is valid
+            {
+                int topFaceIndex = 5; // Index of the +Y face in CubeData
+                int faceStart = topFaceIndex * 6 * vertexStride;
+
+                for (byte x = 0; x < ChunkSize; x++)
+                {
+                    for (byte z = 0; z < ChunkSize; z++)
+                    {
+                        // Check if the block AT the water level is air AND the block ABOVE is air
+                        // We only want a surface, not filled water volume mesh here.
+                        // Correction: Draw water surface if block AT water level is AIR and block BELOW is SOLID (or boundary)
+                        // Correction 2: Simpler - draw water surface if block AT water level is AIR and block ABOVE is AIR.
+                        // Let's stick to the original idea: Draw surface if block ABOVE water is air.
+                        // We also need to ensure we are not drawing water surface inside solid ground.
+                        if (GetLocalVoxelState(x, waterY, z) == 0 && // Block at water level must be air
+                            GetLocalVoxelState(x, waterY + 1, z) == 0) // Block above must be air
+                        {
+                            // Calculate world coordinates for this water surface quad
+                            int worldCornerX = WorldOffset.X + x;
+                            int worldCornerY = waterY; // Y position is the water level
+                            int worldCornerZ = WorldOffset.Z + z;
+
+                            // Add the 6 vertices for the top face (+Y)
+                            for (int j = 0; j < 6 * vertexStride; j += vertexStride)
+                            {
+                                // Add base vertex position (centered around 0,0,0) + 0.5 offset + integer world corner
+                                vertexData.Add(cubeVertices[faceStart + j + 0] + 0.5f + worldCornerX); // Pos X
+                                // Position Y should be exactly AT the water level surface (adjusting for the +0.5f in cube data)
+                                vertexData.Add(0.5f + worldCornerY);                                    // Pos Y
+                                vertexData.Add(cubeVertices[faceStart + j + 2] + 0.5f + worldCornerZ); // Pos Z
+                                vertexData.Add(cubeVertices[faceStart + j + 3]); // Normal X (should be 0)
+                                vertexData.Add(cubeVertices[faceStart + j + 4]); // Normal Y (should be 1)
+                                vertexData.Add(cubeVertices[faceStart + j + 5]); // Normal Z (should be 0)
+                                vertexData.Add(cubeVertices[faceStart + j + 6]); // Tex U
+                                vertexData.Add(cubeVertices[faceStart + j + 7]); // Tex V
+                                // TODO: If implementing shader attributes, add isWater=1.0f here
+                            }
+                        }
+                    }
+                }
+            }
+
             return vertexData;
         }
 
