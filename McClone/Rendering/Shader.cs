@@ -100,6 +100,16 @@ public class Shader : IDisposable
         }
     }
 
+    public void SetVector4(string name, Vector4 data) // Use fully qualified name
+    {
+        Use();
+        int location = GetUniformLocation(name);
+        if (location != -1)
+        {
+            GL.Uniform4(location, data);
+        }
+    }
+
     public void SetFloat(string name, float data)
     {
         Use();

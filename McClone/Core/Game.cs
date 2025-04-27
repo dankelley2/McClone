@@ -6,7 +6,7 @@ using OpenTK.Mathematics;
 using System;
 using System.IO; // Added for Path.Combine and AppContext
 using System.Threading; // For Thread.Sleep
-using VoxelGame.Rendering;
+using VoxelGame.Rendering; // Ensure Rendering namespace is included for Shader, Texture, Camera, and Ui
 using VoxelGame.World; // Ensure World namespace is included for ChunkEdits
 using VoxelGame.Player;
 using VoxelGame.Audio; // Add Audio namespace
@@ -23,6 +23,7 @@ namespace VoxelGame.Core
         private Player.Player _player = null!;
         private CollisionManager _collisionManager = null!;
         private AudioManager _audioManager = null!; // Add AudioManager field
+        private Ui _ui = null!; // Add UI field
         private int _keySoundBuffer = 0; // Store the buffer handle for the sound
 
         // Input state variables
@@ -95,6 +96,11 @@ namespace VoxelGame.Core
             string texturePath = Path.Combine(baseDirectory, "Assets", "Textures", "grass-block.png"); // Use baseDirectory
             _blockTexture = new Texture(texturePath);
             CheckGLError("After Texture Load");
+
+            // --- Initialize UI ---
+            _ui = new Ui();
+            CheckGLError("After UI Init");
+
 
             // --- Load Startup Sound ---
             if (_audioManager != null) // Only load if manager initialized successfully
@@ -174,15 +180,31 @@ namespace VoxelGame.Core
                 GL.ClearColor(0.1f, 0.1f, 0.1f, 1.0f); // Dark loading screen
                 GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
                 SwapBuffers();
-                return; // Skip rendering world
+                return; // Skip rendering world and UI
             }
 
             GL.ClearColor(0.5f, 0.75f, 0.9f, 1.0f); // Match fog color
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
             CheckGLError("RenderFrame Clear");
 
+            // --- Render 3D World ---
+            // Important: Disable depth testing for UI or render UI last
+            GL.Enable(EnableCap.DepthTest); // Ensure depth test is on for 3D
             _world.Draw(_shader, _camera, _blockTexture);
             CheckGLError("RenderFrame World Draw");
+
+            // --- Render UI ---
+            GL.Disable(EnableCap.DepthTest); // Disable depth test for 2D UI overlay
+            // Create an orthographic projection matrix for the UI
+            Matrix4 uiProjection = Matrix4.CreateOrthographicOffCenter(0, Size.X, Size.Y, 0, -1.0f, 1.0f);
+
+            // Example: Draw a semi-transparent black rectangle at top-left
+            _ui.DrawRectangle(new Vector2(10, 10), new Vector2(200, 50), new Color4(0.0f, 0.0f, 0.0f, 0.5f), uiProjection);
+            // Example: Draw placeholder text
+            _ui.DrawText("Hello UI!", new Vector2(15, 25), 1.0f, Color4.White, uiProjection);
+
+            CheckGLError("RenderFrame UI Draw");
+            GL.Enable(EnableCap.DepthTest); // Re-enable depth test if needed later
 
             SwapBuffers();
             CheckGLError("RenderFrame SwapBuffers");
@@ -312,6 +334,7 @@ namespace VoxelGame.Core
             _shader?.Dispose();
             _blockTexture?.Dispose(); // Dispose the texture
             _audioManager?.Dispose(); // Dispose the audio manager
+            _ui?.Dispose(); // Dispose the UI
 
             base.OnUnload();
             CheckGLError("OnUnload");
