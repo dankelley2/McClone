@@ -203,10 +203,10 @@ namespace VoxelGame.Core
             Matrix4 uiProjection = Matrix4.CreateOrthographicOffCenter(0, Size.X, Size.Y, 0, -1.0f, 1.0f);
 
             // Example: Draw a semi-transparent black rectangle at top-left
-            _ui.DrawRectangle(new Vector2(10, 10), new Vector2(200, 50), new Color4(0.0f, 0.0f, 0.0f, 0.5f), uiProjection);
+            _ui.DrawRectangle(new Vector2(10, 10), new Vector2(210, 60), new Color4(0.0f, 0.0f, 0.0f, 0.5f), uiProjection);
             // Example: Draw placeholder text -> Now draws real text
             // _ui.DrawText("Hello UI!", new Vector2(15, 25), 1.0f, Color4.White, uiProjection); // Old placeholder
-            _ui.DrawText("Hello UI!", new Vector2(15, 20), 16f, OpenTK.Mathematics.Color4.White, uiProjection); // Draw actual text (size 16)
+            _ui.DrawText($"World Seed: {_world.WorldSeed}", new Vector2(15, 20), 16f, OpenTK.Mathematics.Color4.White, uiProjection); // Draw actual text (size 16)
             _ui.DrawText($"FPS: {1.0 / e.Time:F0}", new Vector2(15, 45), 16f, OpenTK.Mathematics.Color4.Yellow, uiProjection); // Example FPS counter
 
             CheckGLError("RenderFrame UI Draw");
