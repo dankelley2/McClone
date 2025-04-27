@@ -1,6 +1,6 @@
 # McClone
 
-A simple Minecraft-inspired voxel game clone built with C# and OpenTK.
+A simple Minecraft-inspired voxel game clone built with C# and OpenTK. Below scene is has ~600,000 drawable blocks cached for rendering.
 
 ![World Screenshot](https://github.com/user-attachments/assets/aeb1e4f0-6fe7-4e9f-9f6b-7d065e3a8bfb)
 
