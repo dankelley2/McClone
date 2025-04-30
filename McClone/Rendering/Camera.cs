@@ -34,7 +34,7 @@ namespace VoxelGame.Rendering
 
         public Matrix4 GetProjectionMatrix()
         {
-            return Matrix4.CreatePerspectiveFieldOfView(_fov, AspectRatio, 0.1f, 100.0f);
+            return Matrix4.CreatePerspectiveFieldOfView(_fov, AspectRatio, 0.1f, 200.0f);
         }
 
         public void UpdateVectors()
